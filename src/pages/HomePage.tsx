@@ -1,8 +1,8 @@
-import {Alert, Button, Loader, Section, useInstances, ContractSelector, useSDK, useCreateAsset, useCreateInstance} from '@manifoldxyz/studio-app-sdk-react'
-import {Job, Contract, Asset, Task, StudioAppSDK} from '@manifoldxyz/studio-app-sdk'
-import {AirdroppedToken, SoulboundInfo} from '../types'
-import {Link, useNavigate} from 'react-router-dom'
-import {useEffect, useState} from 'react'
+import {Button, Loader, Section, useInstances, ContractSelector, useSDK, useCreateAsset, useCreateInstance} from '@manifoldxyz/studio-app-sdk-react'
+import {Job, Contract, Asset, Task} from '@manifoldxyz/studio-app-sdk'
+import {SoulboundInfo} from '../types'
+import {useNavigate} from 'react-router-dom'
+import {useState} from 'react'
 import {abi721} from 'src/lib/manifold-creator-abi'
 
 export function HomePage() {
@@ -53,7 +53,7 @@ export function HomePage() {
 
     const getExtensionNames = async (extensionsOnContract: []) => {
       if (extensionsOnContract.length === 0) {
-        return "No soulbound extensions found"
+        return []
       }
 
       let getNameJobs: Task[] = extensionsOnContract.map((extension: string) => 
@@ -78,53 +78,21 @@ export function HomePage() {
       }
 
       const { context } = await sdk.createJob(checkExtensions)
+      let extensionAddress: string[] = []
 
       for (const address of Object.values(context)){
         if (address.output === 'NAME OF EXTENSION'){
-          return Object.keys(address)[0]
+          extensionAddress.push(Object.keys(address)[0])
         }
       }
 
-      return "No soulbound extensions found"
+      return extensionAddress
     }
 
-    const deploySoulboundContract = async (creatorContractAddress: string,) => {
-      const deploySoulbound: Job = {
-        title: `Create and Register Soulbound Extension to Creator Contract`,
-        tasks: [
-          {
-            ref: 'deploySoulboundExtension',
-            name: 'Deploy Soulbound Contract',
-            description: 'Deploy Soulbound Extension Contract',
-            type: 'contract-deploy',
-            inputs: {
-              abi: abi721,
-              byteCode: "",
-              args: [creatorContractAddress],
-            }
-          },]
-      }
-      const { context } = await sdk.createJob(deploySoulbound)
-
-      return context.deploySoulboundExtension.output.name
-      
-    }
-
-    const registerSoulboundExtension = async (creatorContractAddress: string, extensionAddress:string) => {
+    const registerSoulboundExtension = async (creatorContractAddress: string) => {
       const getExtensions: Job = {
         title: `Create and Register Soulbound Extension to Creator Contract`,
         tasks: [
-            {
-              ref: 'registerExtension',
-              name: 'Register Soulbound Extension',
-              description: 'Register Soulbound Extension to creator contract',
-              type: 'register-extension',
-              inputs: {
-                creatorContractAddress: creatorContractAddress,
-                extensionAddress: extensionAddress,
-                creatorContractSpec: 'erc721',
-              }
-            },
             {
               ref: 'deploySoulboundExtension',
               name: 'Deploy Soulbound Contract',
@@ -133,9 +101,43 @@ export function HomePage() {
               inputs: {
                 abi: abi721,
                 byteCode: "",
-                args: [],
+                args: [creatorContractAddress],
               }
             },
+            {
+              ref: 'registerExtension',
+              name: 'Register Soulbound Extension',
+              description: 'Register Soulbound Extension to creator contract',
+              type: 'register-extension',
+              adminCheck: { 
+                creatorContractAddress: creatorContractAddress,
+                contractSpec: 'erc721'
+              },
+              inputs: {
+                creatorContractAddress: creatorContractAddress,
+                extensionAddress: `{{deploySoulboundExtension.output.name}}`,
+                creatorContractSpec: 'erc721'
+              }
+            },
+            {
+              ref: 'setApproveTransfer',
+              name: 'Approval for Transfer',
+              description: 'Turn on Transfer Approval for Tokens minted on Extension Contract',
+              type: 'tx',
+              adminCheck: { 
+                creatorContractAddress: creatorContractAddress,
+                contractSpec: 'erc721'
+              },
+              inputs: {
+                address: `{{deploySoulboundExtension.output.name}}`,
+                abi: abi721,
+                method: 'setApproveTransfer(address,bool)',
+                args: [
+                    creatorContractAddress, 
+                    'true',
+                ]
+            },
+          },
         ]
       }
     
@@ -149,18 +151,19 @@ export function HomePage() {
         return;
       }
 
-      const creatorContractAddress = contract.contractInfo[1].contractAddress
-      const extensionsOnContract = await getExtensions(creatorContractAddress);
-      const extensionAddr = await getExtensionNames(extensionsOnContract);
+      // Check if soulbound extension is registered
+      const creatorContractAddr = contract.contractInfo[1].contractAddress
+      const extensionsOnContract = await getExtensions(creatorContractAddr);
+      const extensionAddresses = await getExtensionNames(extensionsOnContract);
 
       console.log("ALL EXT", extensionsOnContract)
 
-      if (extensionAddr !== "No soulbound extensions found" || true){
-        await createSoulboundInfo(creatorContractAddress, extensionsOnContract[1])
+      if (extensionAddresses.length === 0 || true){
+        await createSoulboundInfo(creatorContractAddr, extensionsOnContract[1])
       }
 
-      // const extensionAddress = await deploySoulboundContract(creatorContractAddress)
-      // const linkSoulboundExtension = await registerSoulboundExtension(creatorContractAddress, extensionAddress);
+      // Register extension
+      // const linkSoulboundExtension = await registerSoulboundExtension(creatorContractAddr);
       // await createSoulboundInfo(creatorContractAddress, extensionAddress)
     }
 

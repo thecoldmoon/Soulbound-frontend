@@ -15,7 +15,6 @@ import {abi721} from 'src/lib/manifold-creator-abi'
 
 export function NewTokenPage() {
     const sdk = useSDK();
-    const navigate = useNavigate();
     let { id, tid } = useParams();
     const token_id = parseInt(tid!)
 

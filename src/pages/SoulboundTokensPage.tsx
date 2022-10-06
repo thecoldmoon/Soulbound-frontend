@@ -81,7 +81,6 @@ export function SoulboundTokensPage() {
             }
         
             const { context } = await sdk.createJob(getTokenOwners)
-            console.log('output', context.getOwners)
         
             return context.getOwners.output[0]
         }
