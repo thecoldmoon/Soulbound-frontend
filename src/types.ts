@@ -1,8 +1,13 @@
 export type AirdroppedToken = {
   assetId: number
-  creatorContract: SimpleContract
-  extensionContract: SimpleContract
+  creatorContract: string
+  extensionContract: string
   gifted: boolean
+}
+
+export type SoulboundInfo = {
+  creatorContract: string
+  extensionContract: string
 }
 
 export type SimpleContract = {

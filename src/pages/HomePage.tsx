@@ -1,6 +1,6 @@
 import {Alert, Button, Loader, Section, useInstances, ContractSelector, useSDK, useCreateAsset, useCreateInstance} from '@manifoldxyz/studio-app-sdk-react'
 import {Job, Contract, Asset, Task, StudioAppSDK} from '@manifoldxyz/studio-app-sdk'
-import {AirdroppedToken} from '../types'
+import {AirdroppedToken, SoulboundInfo} from '../types'
 import {Link, useNavigate} from 'react-router-dom'
 import {useEffect, useState} from 'react'
 import {abi721} from 'src/lib/manifold-creator-abi'
@@ -9,8 +9,23 @@ export function HomePage() {
     const sdk = useSDK()
     const navigate = useNavigate()
     const [contract, setContract] = useState<Contract>()
+    const { mutateAsync: createInstance } = useCreateInstance<SoulboundInfo>()
     
+    const createSoulboundInfo = async (creatorContractAddress: string, extensionAddress: string) => {
+        if (!contract || !creatorContractAddress || !extensionAddress) {
+            return;
+        }
 
+        const newToken: SoulboundInfo = {
+            creatorContract: creatorContractAddress,
+            extensionContract: extensionAddress,
+        }
+
+        const { id: instanceId } = await createInstance({ data: newToken })
+        navigate(`/contract/${instanceId}`)
+    }
+
+    // Async Jobs
     const getExtensions = async (creatorContractAddress: string) => {
       const getExtensions: Job = {
         title: `getCreatorExtensions`,
@@ -38,10 +53,9 @@ export function HomePage() {
 
     const getExtensionNames = async (extensionsOnContract: []) => {
       if (extensionsOnContract.length === 0) {
-        return false
+        return "No soulbound extensions found"
       }
 
-      console.log(extensionsOnContract)
       let getNameJobs: Task[] = extensionsOnContract.map((extension: string) => 
         ({
           ref: extension,
@@ -57,8 +71,6 @@ export function HomePage() {
           },})
       );
 
-      console.log("nameJobs", getNameJobs)
-
       const checkExtensions: Job = {
       
         title: `checkCreatorExtensions`,
@@ -67,16 +79,13 @@ export function HomePage() {
 
       const { context } = await sdk.createJob(checkExtensions)
 
-      console.log("context", context)
-
-      for (const value of Object.values(context)){
-        console.log(value)
-        if (value.output === 'NAME OF EXTENSION'){
-          return true
+      for (const address of Object.values(context)){
+        if (address.output === 'NAME OF EXTENSION'){
+          return Object.keys(address)[0]
         }
       }
 
-      return false
+      return "No soulbound extensions found"
     }
 
     const deploySoulboundContract = async (creatorContractAddress: string,) => {
@@ -142,16 +151,17 @@ export function HomePage() {
 
       const creatorContractAddress = contract.contractInfo[1].contractAddress
       const extensionsOnContract = await getExtensions(creatorContractAddress);
-      const extensionExists = await getExtensionNames(extensionsOnContract);
+      const extensionAddr = await getExtensionNames(extensionsOnContract);
 
-      if (extensionExists || true){
-        navigate(`/contract/${contract.id}`)
-        return
+      console.log("ALL EXT", extensionsOnContract)
+
+      if (extensionAddr !== "No soulbound extensions found" || true){
+        await createSoulboundInfo(creatorContractAddress, extensionsOnContract[1])
       }
 
       // const extensionAddress = await deploySoulboundContract(creatorContractAddress)
       // const linkSoulboundExtension = await registerSoulboundExtension(creatorContractAddress, extensionAddress);
-      // navigate(`/contract/${contract.id}`)
+      // await createSoulboundInfo(creatorContractAddress, extensionAddress)
     }
 
     return (

@@ -1,8 +1,9 @@
-import {Alert, AssetUploader, Button, ButtonLink, Loader, Section, useInstance, useSDK} from '@manifoldxyz/studio-app-sdk-react'
+import {Alert, AssetUploader, Button, ButtonLink, Loader, Section, useInstance, useInstances, useSDK, useCreateAsset, useCreateInstance} from '@manifoldxyz/studio-app-sdk-react'
 import {Job, Asset} from '@manifoldxyz/studio-app-sdk'
-import {AirdroppedToken} from 'src/types'
+import {SoulboundInfo, AirdroppedToken} from 'src/types'
 import {Link, useParams, useNavigate} from 'react-router-dom'
-import {useEffect, useState} from 'react'
+import {useEffect, useState, useCallback} from 'react'
+import {ArrowLeftIcon} from '@heroicons/react/outline'
 import {abi721} from 'src/lib/manifold-creator-abi'
 
 export function SoulboundTokensPage() {
@@ -10,74 +11,98 @@ export function SoulboundTokensPage() {
     const params = useParams<{ id: string }>()
     const id = parseInt(params.id!)
 
-    const [owners, setOwners] = useState([])
-    const { isLoading, error, data: instance } = useInstance<AirdroppedToken>(id)
     const sdk = useSDK()
+    const [owners, setOwners] = useState([])
+    const { isLoading: loadingSB, error: errorSB, data: instance } = useInstance<SoulboundInfo>(id)
+    const { mutateAsync: createAsset } = useCreateAsset()
+    const { mutateAsync: createInstance } = useCreateInstance<AirdroppedToken>()
+    const { isLoading: loadingTokens, error: errorTokens, data: instances } = useInstances<AirdroppedToken>()
 
-    // Manifold Implenetation
-    const airdropToAddress = async () => {
-        if (!instance) {
-            return
+    const [assets, setAssets] = useState<Asset[]>()
+
+    useEffect(() => {
+        const fetch = async () => {
+            if (!instances) return;
+            const assts = await Promise.all(
+                instances.map(({ id, data }) => sdk.fetchAsset(data.assetId))
+            );
+            setAssets(assts)
         }
 
-        const token = instance.data
-        const assetId = token.assetId
-        const contractAddress = token.extensionContract.address
+        if (instances) {
+            fetch();
+        }
+    }, [instances, sdk])
 
-        // Prepares the job with two tasks:
-        // 1. Upload the asset to Arweave
-        // 2. Call the mintBase function on the creator's Manifold Creator contract
-        //    with the Arweave URI generated in the previous task.
-        const mintJob: Job = {
-            title: `Airdrop token to Address`,
+    // When the create button is clicked, we use the create hooks
+    // to create the asset and create the instance referencing the asset.
+    const createToken = async () => {
+        if (!instance || !instance.data) {
+            return;
+        }
+
+        //Create asset to be associated with instance
+        const {id: assetId} = await createAsset();
+
+        const newToken: AirdroppedToken = {
+            assetId: assetId,
+            creatorContract: instance.data.creatorContract,
+            extensionContract: instance.data.extensionContract,
+            gifted: false,
+        }
+
+        const { id: instanceId } = await createInstance({ data: newToken })
+        navigate(`/contract/${id}/token/${instanceId}`)
+    }
+
+    useEffect(() => {
+        // Load token owners
+        const getTokenOwners = async () => {
+            if (!instance || !instance.data) {
+                return;
+            }
+            const getTokenOwners: Job = {
+            title: `Get Collection Owners`,
             tasks: [
                 {
-                    ref: 'airdrop',
-                    name: 'Airdrop to Address',
-                    description: 'Mints the token on new owner wallet.',
-                    type: 'tx',
+                    ref: 'getOwners',
+                    name: 'Get Collection Owners',
+                    description: 'Get Collection Owners',
+                    type: 'contract-call',
                     inputs: {
-                        address: contractAddress,
+                        address: instance.data.extensionContract, 
                         abi: abi721,
-                        method: 'mint(address)',
+                        method: 'getTokenOwners()',
                         args: [
-                            '0xd8da6bf26964af9d7eed9e03e53415d37aa96045', // vitalik.eth
                         ]
                     },
                 },
             ]
+            }
+        
+            const { context } = await sdk.createJob(getTokenOwners)
+            console.log('output', context.getOwners)
+        
+            return context.getOwners.output[0]
+        }
+        // Get all Owners
+        const fetch = async () => {
+            if (!instance) return;
+            const fetched_owners = await getTokenOwners();
+            console.log(fetched_owners)
+            setOwners(fetched_owners)
         }
 
-        // Run the mint job
-        await sdk.createJob(mintJob)
-    }
+        if (instance) {
+            fetch();
+        }
+        // Fetch all collections
+    }, [instance, sdk])
 
-
-    // PLAN FOR NOW:
-    // 1. Connect to contract
-    // 2. Check if extension is registered, if not, deploy and register contract
-    //   {
-    //     ref: 'registerExtension',
-    //     name: 'Register the Soulbound Extension',
-    //     description: 'Registers the extension on your Creator Contract',
-    //     type: 'register-extension',
-    //     adminCheck: { // Checks if the creator is an admin of the contract
-    //       creatorContractAddress: creatorContractAddress,
-    //       contractSpec: creatorContractSpec
-    //     },
-    //     inputs: {
-    //       creatorContractAddress,
-    //       extensionAddress,
-    //       creatorContractSpec
-    //     },
-    //   }
-    // 2. Function to add to collection, function to download CSV
-
-    useEffect(() => {
-        // Get all Owners
-    }, [])
+    
 
     const downloadOwnersCSV = async () => {
+        if (!owners) return;
         //define the heading for each row of the data  
         var csv = 'Owner Address\n';  
                     
@@ -102,23 +127,34 @@ export function SoulboundTokensPage() {
         <Section>
             <div className="flex mb-2 justify-between">
                 <div className="flex items-center space-x-6">
-                    <h1 className="flex-auto text-2xl font-bold">Your tokens</h1>
-                    <ButtonLink variant="primary" to="/token/new">
+                    <Link to='/'>
+                        <ArrowLeftIcon className="h-5 w-5" />
+                    </Link>
+                    <h1 className="flex-auto text-2xl font-bold">Collections</h1>
+                </div>
+            </div>
+            <div className="flex mb-2 justify-between">
+                <div className="flex items-center space-x-6">
+                    <Button  variant="primary" onClick={createToken}>
                         + New token
-                    </ButtonLink>
-                    <Button className="pb-4" variant="primary" onClick={downloadOwnersCSV}>
+                    </Button>
+                    <Button variant="primary" onClick={downloadOwnersCSV} disabled={!instance}>
                         Download CSV of current owners
                     </Button>
                 </div>
             </div>
-            {isLoading && <Loader />}
-            {error && <Alert type="error">{error.message}</Alert>}
-            {instance &&
-              <div>
-               <Button className="pb-4" variant="primary" onClick={airdropToAddress}>Airdrop to New Owner</Button>
-               <AssetUploader assetId={instance.data.assetId} />
-              </div>
-            }
+            {(loadingTokens || loadingSB) && <Loader />}
+            {errorTokens && <Alert type="error">{errorTokens.message}</Alert>}
+            {errorSB && <Alert type="error">{errorSB.message}</Alert>}
+            {instances && (
+                <div>
+                {assets && assets.map((asset) => (
+                    <Link key={asset.id} to={`/token/${asset.id}`} className="block py-2 border-b border-gray first:border-t hover:bg-gray-100 truncate">
+                    <h1>{asset.metadata.name}</h1>
+                    </Link>
+                    ))}
+                </div>
+            )}
         </Section>
     )
 }

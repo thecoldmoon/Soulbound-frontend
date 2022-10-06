@@ -16,10 +16,10 @@ import {abi721} from 'src/lib/manifold-creator-abi'
 export function NewTokenPage() {
     const sdk = useSDK();
     const navigate = useNavigate();
-    const params = useParams<{ id: string }>()
-    const id = parseInt(params.id!)
+    let { id, tid } = useParams();
+    const token_id = parseInt(tid!)
 
-    const { isLoading, error, data: instance } = useInstance<AirdroppedToken>(id)
+    const { isLoading, error, data: instance } = useInstance<AirdroppedToken>(token_id)
 
     const mintToAddress = async () => {
         if (!instance || !address) {
@@ -28,14 +28,14 @@ export function NewTokenPage() {
 
         const token = instance.data
         const assetId = token.assetId
-        const contractAddress = token.contractExtension.address
+        const contractAddress = token.extensionContract
 
         // Prepares the job with two tasks:
         // 1. Upload the asset to Arweave
         // 2. Call the mintBase function on the creator's Manifold Creator contract
         //    with the Arweave URI generated in the previous task.
         const mintJob: Job = {
-            title: `Airdrop token to Vitalik`,
+            title: `Airdrop To Address`,
             tasks: [
                 {
                     ref: 'upload',
@@ -54,9 +54,9 @@ export function NewTokenPage() {
                     inputs: {
                         address: contractAddress,
                         abi: abi721,
-                        method: 'mintBase(address,string)',
+                        method: 'mint(address)',
                         args: [
-                            address, // vitalik.eth
+                            address,
                             `{{upload.output.hash}}`, // 
                         ]
                     },
@@ -69,23 +69,27 @@ export function NewTokenPage() {
     }
 
     const [address, setAddress] = useState("");
+    const backlink = `/contract/${id}`
 
     return (
         <Section>
             <div className="flex mb-2 justify-between">
                 <div className="flex items-center space-x-6">
-                    <Link to="/">
+                    <Link to={backlink}>
                         <ArrowLeftIcon className="h-5 w-5" />
                     </Link>
-                    <h1 className="flex-auto text-2xl font-bold">Your token</h1>
+                    <h1 className="flex-auto text-2xl font-bold">Create token</h1>
                 </div>
             </div>
             {isLoading && <Loader />}
             {error && <Alert type="error">{error.message}</Alert>}
             {instance &&
               <div>
-                <input value={address} onChange={e => setAddress(e.target.value)} type='text' />
-               <Button className="pb-4" variant="primary" onClick={mintToAddress}>Airdrop to Address</Button>
+                <label>
+                    Address to drop to:
+                    <input value={address} onChange={e => setAddress(e.target.value)} type='text' />
+                </label>
+               <Button variant="primary" onClick={mintToAddress} disabled={!address}>Airdrop to Address</Button>
                <AssetUploader assetId={instance.data.assetId} />
               </div>
             }
