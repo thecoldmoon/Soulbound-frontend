@@ -1,11 +1,15 @@
 export type AirdroppedToken = {
   assetId: number
-  creatorContract: string
-  extensionContract: string
+  collectionId: number
   gifted: boolean
 }
 
-export type SoulboundInfo = {
+export type Collection = {
+  name: string
+  attachmentId: number
+}
+
+export type AttachmentInfo = {
   creatorContract: string
   extensionContract: string
 }

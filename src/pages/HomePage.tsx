@@ -1,22 +1,31 @@
-import {Button, Loader, Section, useInstances, ContractSelector, useSDK, useCreateAsset, useCreateInstance} from '@manifoldxyz/studio-app-sdk-react'
+import {Alert, Button, Loader, Section, useDeleteInstance, useInstances, ContractSelector, useSDK, useCreateAsset, useCreateInstance} from '@manifoldxyz/studio-app-sdk-react'
 import {Job, Contract, Asset, Task} from '@manifoldxyz/studio-app-sdk'
-import {SoulboundInfo} from '../types'
+import {AttachmentInfo} from '../types'
 import {useNavigate} from 'react-router-dom'
-import {useState} from 'react'
+import {useState, useEffect} from 'react'
 import {abi721} from 'src/lib/manifold-creator-abi'
 
 export function HomePage() {
     const sdk = useSDK()
     const navigate = useNavigate()
     const [contract, setContract] = useState<Contract>()
-    const { mutateAsync: createInstance } = useCreateInstance<SoulboundInfo>()
+    const { mutateAsync: createInstance } = useCreateInstance<AttachmentInfo>()
+    const deleteInstance = useDeleteInstance()
+    const { isLoading, error, data: instances } = useInstances<AttachmentInfo>()
     
-    const createSoulboundInfo = async (creatorContractAddress: string, extensionAddress: string) => {
-        if (!contract || !creatorContractAddress || !extensionAddress) {
+    const createAttachmentInfo = async (creatorContractAddress: string, extensionAddress: string) => {
+        if (!contract || !creatorContractAddress || !extensionAddress || !instances) {
             return;
         }
+        instances.forEach(function({ id, data }) { 
+          if (data.creatorContract === creatorContractAddress && data.extensionContract === extensionAddress) {
+              navigate(`/contract/${id}`)
+              return
+          }
+        }); 
 
-        const newToken: SoulboundInfo = {
+        // Check if instance exists
+        const newToken: AttachmentInfo = {
             creatorContract: creatorContractAddress,
             extensionContract: extensionAddress,
         }
@@ -80,9 +89,9 @@ export function HomePage() {
       const { context } = await sdk.createJob(checkExtensions)
       let extensionAddress: string[] = []
 
-      for (const address of Object.values(context)){
-        if (address.output === 'NAME OF EXTENSION'){
-          extensionAddress.push(Object.keys(address)[0])
+      for (const [key, value] of Object.entries(context)) {
+        if (value.output[0] === '0x789564821c100B9516F567046285c89a01f25D10'){
+          extensionAddress.push(key)
         }
       }
 
@@ -155,16 +164,11 @@ export function HomePage() {
       const creatorContractAddr = contract.contractInfo[1].contractAddress
       const extensionsOnContract = await getExtensions(creatorContractAddr);
       const extensionAddresses = await getExtensionNames(extensionsOnContract);
+      console.log('extensions', extensionAddresses, extensionAddresses.length === 0 )
 
-      console.log("ALL EXT", extensionsOnContract)
-
-      if (extensionAddresses.length === 0 || true){
-        await createSoulboundInfo(creatorContractAddr, extensionsOnContract[1])
-      }
-
-      // Register extension
-      // const linkSoulboundExtension = await registerSoulboundExtension(creatorContractAddr);
-      // await createSoulboundInfo(creatorContractAddress, extensionAddress)
+      // Register extension if needed, else use existing extension
+      let linkSoulboundExtension = extensionAddresses.length === 0 ? await registerSoulboundExtension(creatorContractAddr) : extensionsOnContract[1];
+      await createAttachmentInfo(creatorContractAddr, linkSoulboundExtension)
     }
 
     return (

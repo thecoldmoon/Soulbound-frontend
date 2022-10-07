@@ -3,11 +3,14 @@ import {
     AssetUploader, Button,
     Loader,
     Section,
+    useCreateAsset,
+    useCreateInstance,
+    useUpdateAssetMetadata,
     useInstance,
     useSDK
 } from '@manifoldxyz/studio-app-sdk-react'
-import {AirdroppedToken} from 'src/types'
-import {Link, useParams, useNavigate} from 'react-router-dom'
+import {AirdroppedToken, Collection, AttachmentInfo} from 'src/types'
+import {Link, useParams, useNavigate,} from 'react-router-dom'
 import {useEffect, useState} from 'react'
 import {ArrowLeftIcon} from '@heroicons/react/outline'
 import {Job} from '@manifoldxyz/studio-app-sdk'
@@ -15,19 +18,60 @@ import {abi721} from 'src/lib/manifold-creator-abi'
 
 export function NewTokenPage() {
     const sdk = useSDK();
-    let { id, tid } = useParams();
-    const token_id = parseInt(tid!)
+    const params = useParams<{ collection: string , id: string}>()
+    const collectionId = parseInt(params.collection!)
+    const id = parseInt(params.id!)
+    const { mutateAsync: updateMetadata } = useUpdateAssetMetadata()
+    const { mutateAsync: createAsset } = useCreateAsset()
+    const { mutateAsync: createInstance } = useCreateInstance<AirdroppedToken>()
+    const [address, setAddress] = useState("");
+    const [mintSuccess, setMintSuccess] = useState(false);
+    const [assetIdn, setAssetIdn] = useState<number>(0);
+    const [token, setToken] = useState<AirdroppedToken>();
+    const backlink = `/contract/${id}`
 
-    const { isLoading, error, data: instance } = useInstance<AirdroppedToken>(token_id)
+    const { isLoading, error, data: instance } = useInstance<Collection>(collectionId)
+    const { isLoading: isAttachmentLoading, error: attachmentError, data: AttachmentInfo } = useInstance<AttachmentInfo>(id)
+
+    //Clean up if asset not used
+
+    useEffect(() => {
+        const createToken = async () => {
+            if (!instance || !instance.data || !collectionId) {
+                return;
+            }
+    
+            //Create asset to be associated with instance
+            const {id: assetId, metadata} = await createAsset();
+
+            //Update Asset Name here
+            metadata.name = "Airdropped Token";
+            await updateMetadata({id: assetId, data: metadata})
+    
+            //Create Token
+            const newToken: AirdroppedToken = {
+                assetId: assetId,
+                collectionId: collectionId,
+                gifted: false,
+            }
+    
+            const { id: instanceId } = await createInstance({ data: newToken })
+            setToken(newToken);
+            setAssetIdn(assetId);
+        }
+        if (instance && collectionId){
+            createToken()
+        }
+    }, [instance, collectionId, createAsset, createInstance, updateMetadata])
+
 
     const mintToAddress = async () => {
-        if (!instance || !address) {
+        if (!instance || !AttachmentInfo || !address || !token) {
             return
         }
 
-        const token = instance.data
         const assetId = token.assetId
-        const contractAddress = token.extensionContract
+        const contractAddress = AttachmentInfo.data.extensionContract
 
         // Prepares the job with two tasks:
         // 1. Upload the asset to Arweave
@@ -46,14 +90,14 @@ export function NewTokenPage() {
                     }
                 },
                 {
-                    ref: 'airdrop',
-                    name: 'Airdrop to Vitalik\'s',
-                    description: 'Mints the token on Vitalik\'s wallet.',
+                    ref: 'mint',
+                    name: 'Mint to Address',
+                    description: 'Mints the wallet of recipient',
                     type: 'tx',
                     inputs: {
                         address: contractAddress,
                         abi: abi721,
-                        method: 'mint(address)',
+                        method: 'mint(address, string)',
                         args: [
                             address,
                             `{{upload.output.hash}}`, // 
@@ -65,10 +109,8 @@ export function NewTokenPage() {
 
         // Run the mint job
         const {context} = await sdk.createJob(mintJob)
+        setMintSuccess(true);
     }
-
-    const [address, setAddress] = useState("");
-    const backlink = `/contract/${id}`
 
     return (
         <Section>
@@ -80,6 +122,7 @@ export function NewTokenPage() {
                     <h1 className="flex-auto text-2xl font-bold">Create token</h1>
                 </div>
             </div>
+            {mintSuccess && <Alert type="success" title="Success">Token minted successfully! Go back to previous page to mint again</Alert>} 
             {isLoading && <Loader />}
             {error && <Alert type="error">{error.message}</Alert>}
             {instance &&
@@ -89,7 +132,7 @@ export function NewTokenPage() {
                     <input value={address} onChange={e => setAddress(e.target.value)} type='text' />
                 </label>
                <Button variant="primary" onClick={mintToAddress} disabled={!address}>Airdrop to Address</Button>
-               <AssetUploader assetId={instance.data.assetId} />
+               <AssetUploader assetId={assetIdn} />
               </div>
             }
         </Section>
