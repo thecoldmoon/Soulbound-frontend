@@ -1,5 +1,6 @@
 import {Alert, Button, Loader, Section, useDeleteInstance, useInstances, ContractSelector, useSDK, useCreateAsset, useCreateInstance} from '@manifoldxyz/studio-app-sdk-react'
-import {Job, Contract, Asset, Task} from '@manifoldxyz/studio-app-sdk'
+import {Job, JobProgress, Contract, Asset, Task} from '@manifoldxyz/studio-app-sdk'
+import {contractByteCode} from 'src/contracts/contractByteCode'
 import {AttachmentInfo} from '../types'
 import {useNavigate} from 'react-router-dom'
 import {useState, useEffect} from 'react'
@@ -10,19 +11,35 @@ export function HomePage() {
     const navigate = useNavigate()
     const [contract, setContract] = useState<Contract>()
     const { mutateAsync: createInstance } = useCreateInstance<AttachmentInfo>()
-    const deleteInstance = useDeleteInstance()
+    const { mutateAsync: deleteInstance } = useDeleteInstance()
     const { isLoading, error, data: instances } = useInstances<AttachmentInfo>()
+
+    const onProgress = (progress: JobProgress) => {
+      console.log(progress.stage) // 'start-task' | 'complete-task'
+      console.log(progress.result)
+      console.log(progress.task.ref)
+      console.log(progress.context)
+  }
+
+    useEffect(() => {
+      const fetch = async () => {
+          if (!instances) return
+          instances.forEach(function({ id:id_instance, data }) { 
+            deleteInstance({ id:id_instance})
+          });  
+      }
+
+      if (instances) {
+          console.log("instances", instances)
+          // fetch()
+      }
+  }, [instances, sdk])
     
     const createAttachmentInfo = async (creatorContractAddress: string, extensionAddress: string) => {
+        console.log("createAttachmentInfo")
         if (!contract || !creatorContractAddress || !extensionAddress || !instances) {
             return;
         }
-        instances.forEach(function({ id, data }) { 
-          if (data.creatorContract === creatorContractAddress && data.extensionContract === extensionAddress) {
-              navigate(`/contract/${id}`)
-              return
-          }
-        }); 
 
         // Check if instance exists
         const newToken: AttachmentInfo = {
@@ -62,21 +79,20 @@ export function HomePage() {
 
     const getExtensionNames = async (extensionsOnContract: []) => {
       if (extensionsOnContract.length === 0) {
-        return []
+        return ""
       }
 
       let getNameJobs: Task[] = extensionsOnContract.map((extension: string) => 
         ({
           ref: extension,
-          name: 'Get Extension Name',
+          name: 'Get Extension Names',
           description: 'Get name of registered extension',
           type: 'contract-call',
           inputs: {
               address: extension, 
               abi: abi721,
-              method: 'owner',
-              args: [
-              ]
+              method: 'supportsInterface(bytes4)',
+              args: ['0x736f756c']
           },})
       );
 
@@ -87,20 +103,23 @@ export function HomePage() {
       }
 
       const { context } = await sdk.createJob(checkExtensions)
-      let extensionAddress: string[] = []
+      console.log("extensionsOnContract:", context)
 
+      // Change to verify extension type
       for (const [key, value] of Object.entries(context)) {
-        if (value.output[0] === '0x789564821c100B9516F567046285c89a01f25D10'){
-          extensionAddress.push(key)
+        if (value.output[0] === true){
+          return key
         }
       }
 
-      return extensionAddress
+      return ""
     }
 
     const registerSoulboundExtension = async (creatorContractAddress: string) => {
+      console.log("registerSoulboundExtension")
       const getExtensions: Job = {
         title: `Create and Register Soulbound Extension to Creator Contract`,
+        onProgress,
         tasks: [
             {
               ref: 'deploySoulboundExtension',
@@ -109,7 +128,7 @@ export function HomePage() {
               type: 'contract-deploy',
               inputs: {
                 abi: abi721,
-                byteCode: "",
+                byteCode: contractByteCode.object,
                 args: [creatorContractAddress],
               }
             },
@@ -159,16 +178,34 @@ export function HomePage() {
       if (!contract) {
         return;
       }
-
-      // Check if soulbound extension is registered
       const creatorContractAddr = contract.contractInfo[1].contractAddress
       const extensionsOnContract = await getExtensions(creatorContractAddr);
-      const extensionAddresses = await getExtensionNames(extensionsOnContract);
-      console.log('extensions', extensionAddresses, extensionAddresses.length === 0 )
+      console.log("extensionsOnContract", extensionsOnContract)
+      const soulboundAddr = await getExtensionNames(extensionsOnContract);
+      console.log("extensionsNames", soulboundAddr)
 
       // Register extension if needed, else use existing extension
-      let linkSoulboundExtension = extensionAddresses.length === 0 ? await registerSoulboundExtension(creatorContractAddr) : extensionsOnContract[1];
+      let linkSoulboundExtension = soulboundAddr === "" ? await registerSoulboundExtension(creatorContractAddr) : soulboundAddr;
       await createAttachmentInfo(creatorContractAddr, linkSoulboundExtension)
+    }
+
+    const prepareAttachmentInfo = async () => {
+      if (!instances || !contract) {
+        return;
+      }
+
+      // Check if soulbound extension is registered with contract AND has instance
+      const creatorContractAddr = contract.contractInfo[1].contractAddress
+      console.log('CC adr', creatorContractAddr)
+      console.log('attachment Instances', instances)
+      const instanceExists = instances.find( item => item.data.creatorContract === creatorContractAddr)
+      if (instanceExists) {
+        navigate(`/contract/${instanceExists.id}`)
+        return
+      }
+
+      // Check if soulbound extension is registered with contract, but no instance
+      await prepareExtension()
     }
 
     return (
@@ -176,10 +213,10 @@ export function HomePage() {
         <Section>
             <div className="flex mb-2 justify-between">
                 <div className="flex items-center space-x-6">
-                    <h1 className="flex-auto text-2xl font-bold">Choose the contract you wish to mint on</h1>
+                    <h1 className="flex-auto text-2xl font-bold">Choose the contract you wish to mint Soulbound NFTs on</h1>
                 </div>
-                <Button variant="primary" onClick={prepareExtension} disabled={!contract}>
-                    Create
+                <Button variant="primary" onClick={prepareAttachmentInfo} disabled={!contract}>
+                    Select
                 </Button>
             </div>
             <ContractSelector

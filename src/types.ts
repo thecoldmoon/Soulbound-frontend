@@ -6,6 +6,7 @@ export type AirdroppedToken = {
 
 export type Collection = {
   name: string
+  edition: number
   attachmentId: number
 }
 

@@ -4,16 +4,19 @@ import {
     Loader,
     Section,
     useCreateAsset,
+    useInstances,
     useCreateInstance,
     useUpdateAssetMetadata,
+    useUpdateInstance,
     useInstance,
+    useSubmitJob,
     useSDK
 } from '@manifoldxyz/studio-app-sdk-react'
 import {AirdroppedToken, Collection, AttachmentInfo} from 'src/types'
 import {Link, useParams, useNavigate,} from 'react-router-dom'
 import {useEffect, useState} from 'react'
 import {ArrowLeftIcon} from '@heroicons/react/outline'
-import {Job} from '@manifoldxyz/studio-app-sdk'
+import {Job, JobProgress} from '@manifoldxyz/studio-app-sdk'
 import {abi721} from 'src/lib/manifold-creator-abi'
 
 export function NewTokenPage() {
@@ -30,14 +33,36 @@ export function NewTokenPage() {
     const [token, setToken] = useState<AirdroppedToken>();
     const backlink = `/contract/${id}`
 
-    const { isLoading, error, data: instance } = useInstance<Collection>(collectionId)
-    const { isLoading: isAttachmentLoading, error: attachmentError, data: AttachmentInfo } = useInstance<AttachmentInfo>(id)
+    const { mutateAsync: updateInstance }  = useUpdateInstance<Collection>()
+    const { isLoading: isAttachmentLoading, error: attachmentError, data: attachmentInfo } = useInstance<AttachmentInfo>(id)
+    const { isLoading: isCollectionLoading, error: collectionError, data: collectionInfo } = useInstance<Collection>(collectionId)
+    const { isLoading: loadingTokens, error: errorTokens, data: instances } = useInstances<AirdroppedToken>()
 
     //Clean up if asset not used
 
+    const {
+        isProcessing,     // if job is still happening
+        isSuccess,        // if job was successful or not
+        progress,         // contains most recent progress event
+        result,           // result of your job
+        error,            // error object
+        submit: submitJob,          // handler to pass job to invoke
+    } = useSubmitJob();
+
+    const onProgress = (progress: JobProgress) => {
+        console.log(progress.stage) // 'start-task' | 'complete-task'
+        console.log(progress.result)
+        console.log(progress.task.ref)
+        console.log(progress.context)
+    }
+
+    useEffect(() => {
+        console.log('error', error)
+    }, [error])
+
     useEffect(() => {
         const createToken = async () => {
-            if (!instance || !instance.data || !collectionId) {
+            if (!collectionInfo || !collectionInfo.data || !collectionInfo) {
                 return;
             }
     
@@ -45,7 +70,7 @@ export function NewTokenPage() {
             const {id: assetId, metadata} = await createAsset();
 
             //Update Asset Name here
-            metadata.name = "Airdropped Token";
+            metadata.name = collectionInfo.data.name +" #"+ String(collectionInfo.data.edition+1);
             await updateMetadata({id: assetId, data: metadata})
     
             //Create Token
@@ -59,19 +84,33 @@ export function NewTokenPage() {
             setToken(newToken);
             setAssetIdn(assetId);
         }
-        if (instance && collectionId){
-            createToken()
+        if (collectionInfo && collectionInfo.data && collectionInfo && collectionId) {
+            //Check if an unused asset exists, if not, create one
+            const tokenExists = existsUnusedTokens();
+            if (!tokenExists) {
+            createToken();
+            }
         }
-    }, [instance, collectionId, createAsset, createInstance, updateMetadata])
+    }, [collectionInfo, createAsset, createInstance, updateMetadata, collectionId])
 
+
+    const existsUnusedTokens = () => {
+        if (!instances) return true
+        const instanceExists = instances.find( item => item.data.gifted === false && item.data.collectionId === collectionId)
+        if (!instanceExists) return false
+        setToken(instanceExists.data);
+        setAssetIdn(instanceExists.data.assetId);
+        return true
+    }
 
     const mintToAddress = async () => {
-        if (!instance || !AttachmentInfo || !address || !token) {
+        if (!attachmentInfo || !collectionInfo || !address || !token) {
             return
         }
 
         const assetId = token.assetId
-        const contractAddress = AttachmentInfo.data.extensionContract
+        const contractAddress = attachmentInfo.data.extensionContract
+        console.log('minting', assetId, token, collectionInfo)
 
         // Prepares the job with two tasks:
         // 1. Upload the asset to Arweave
@@ -79,6 +118,7 @@ export function NewTokenPage() {
         //    with the Arweave URI generated in the previous task.
         const mintJob: Job = {
             title: `Airdrop To Address`,
+            onProgress,
             tasks: [
                 {
                     ref: 'upload',
@@ -97,8 +137,9 @@ export function NewTokenPage() {
                     inputs: {
                         address: contractAddress,
                         abi: abi721,
-                        method: 'mint(address, string)',
+                        method: 'mint(string,address,string)',
                         args: [
+                            collectionInfo.data.name,
                             address,
                             `{{upload.output.hash}}`, // 
                         ]
@@ -107,8 +148,10 @@ export function NewTokenPage() {
             ]
         }
 
+        await updateInstance({ id, data: {edition: collectionInfo.data.edition+1}})
+
         // Run the mint job
-        const {context} = await sdk.createJob(mintJob)
+        const {context} = await submitJob(mintJob)
         setMintSuccess(true);
     }
 
@@ -123,9 +166,9 @@ export function NewTokenPage() {
                 </div>
             </div>
             {mintSuccess && <Alert type="success" title="Success">Token minted successfully! Go back to previous page to mint again</Alert>} 
-            {isLoading && <Loader />}
-            {error && <Alert type="error">{error.message}</Alert>}
-            {instance &&
+            {isCollectionLoading && <Loader />}
+            {collectionError && <Alert type="error">{collectionError.message}</Alert>}
+            {collectionInfo &&
               <div>
                 <label>
                     Address to drop to:

@@ -1,5 +1,5 @@
-import {Alert, AssetUploader, Button, ButtonLink, Loader, Section, useInstance, useInstances, useSDK, useCreateAsset, useCreateInstance} from '@manifoldxyz/studio-app-sdk-react'
-import {Job, Asset} from '@manifoldxyz/studio-app-sdk'
+import {Alert, AssetUploader, Button, ButtonLink, Loader, Section, useInstance, useInstances, useSDK, useSubmitJob, useCreateInstance} from '@manifoldxyz/studio-app-sdk-react'
+import {Job, JobProgress} from '@manifoldxyz/studio-app-sdk'
 import {AttachmentInfo, AirdroppedToken, Collection} from 'src/types'
 import {Link, useParams, useNavigate} from 'react-router-dom'
 import {useEffect, useState, useCallback} from 'react'
@@ -21,35 +21,31 @@ export function SoulboundTokensPage() {
     const [collection, setCollection] = useState('')
     const [collections, setCollections] = useState<Collection[]>()
 
-    const people = [
-        {
-            name: 'Calvin Hawkins',
-            email: 'calvin.hawkins@example.com',
-            image:
-            'https://images.unsplash.com/photo-1491528323818-fdd1faba62cc?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
-        },
-        {
-            name: 'Kristen Ramos',
-            email: 'kristen.ramos@example.com',
-            image:
-            'https://images.unsplash.com/photo-1550525811-e5869dd03032?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
-        },
-        {
-            name: 'Ted Fox',
-            email: 'ted.fox@example.com',
-            image:
-            'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
-        },
-    ]   
+    const {
+        isProcessing,     // if job is still happening
+        isSuccess,        // if job was successful or not
+        progress,         // contains most recent progress event
+        result,           // result of your job
+        error,            // error object
+        submit: submitJob            // handler to pass job to invoke
+    } = useSubmitJob();
+
+    const onProgress = (progress: JobProgress) => {
+        console.log(progress.stage) // 'start-task' | 'complete-task'
+        console.log(progress.result)
+        console.log(progress.task.ref)
+        console.log(progress.context)
+    }
+       
 
     useEffect(() => {
         const fetch = async () => {
             if (!instances) return;
             var valid_collections: Collection[] = []
             var map: Map<string, number> = new Map<string, number>()
-            instances.forEach(function({ id, data }) { 
+            instances.forEach(function({ id:tid, data }) { 
                     if (data.attachmentId === id){
-                        map.set(data.name, id);
+                        map.set(data.name, tid);
                         valid_collections.push(data)
                     }
             });  
@@ -62,6 +58,11 @@ export function SoulboundTokensPage() {
         }
     }, [instances, sdk])
 
+    useEffect(() => {
+        console.log('collections', collections)
+        console.log('error', error)
+    }, [collections, error])
+
     const createNewCollection = async () => {
 
         // Check if instance exists
@@ -69,6 +70,7 @@ export function SoulboundTokensPage() {
         const newCollection: Collection = {
             name: collectionName,
             attachmentId: id,
+            edition: 0,
         }
 
         const { id: instanceId } = await createInstance({ data: newCollection })
@@ -82,16 +84,13 @@ export function SoulboundTokensPage() {
         }
         const getTokenOwners: Job = {
         title: `Get Collection Owners`,
+        onProgress,
         tasks: [
             {
                 ref: 'getOwners',
                 name: 'Get Collection Owners',
                 description: 'Get Collection Owners',
                 type: 'contract-call',
-                adminCheck: { 
-                    creatorContractAddress: instance.data.creatorContract,
-                    contractSpec: 'erc721'
-                },
                 inputs: {
                     address: instance.data.extensionContract, 
                     abi: abi721,
@@ -103,13 +102,14 @@ export function SoulboundTokensPage() {
         ]
         }
     
-        const { context } = await sdk.createJob(getTokenOwners)
+        const { context } = await submitJob(getTokenOwners);
     
         return context.getOwners.output[0]
     }
 
     const downloadOwnersCSV = async () => {
         const fetched_owners = await getTokenOwners();
+        console.log('fetched_owners', fetched_owners)
         if (!fetched_owners) return;
         //define the heading for each row of the data  
         var csv = 'Owner Address\n';  
@@ -150,34 +150,28 @@ export function SoulboundTokensPage() {
                     {instances && (
                         <div>
                         {collections && collections.map((coln) => (
-                            <h1>{coln.name}</h1>
-                            ))}
-                        </div>
-                    )}
-                    <ul className="divide-y divide-gray-200">
-                    {people.map((person) => (
-                        <Button onClick={() => setCollection(person.email)} className="block py-4 border-b border-gray first:border-t hover:bg-gray-100 truncate">
-                            <li key={person.email} className={person.email === collection ? "bg-sky-500/25 py-4 flex" : "py-4 flex"}>
-                                <img className="h-10 w-10 rounded-full" src={person.image} alt="" />
-                                <div className="ml-3">
-                                    <p className="text-sm font-medium text-gray-900">{person.name}</p>
-                                    <p className="text-sm text-gray-500">{person.email}</p>
+                            <Button onClick={() => setCollection(coln.name)} className="block flex py-4 border-b border-gray first:border-t hover:bg-gray-100 truncate">
+                            <li key={coln.name} className={coln.name === collection ? "bg-sky-500/25 py-4 flex" : "py-4 flex"}>
+                                <div className="ml-3 py-4 flex">
+                                    <p className="text-sm font-medium text-gray-900 py-4 flex">{coln.name}</p>
+                                    <p className="text-sm text-gray-500 py-4 flex">{coln.name}</p>
                                 </div>
                             </li>
                         </Button>
-                    ))}
+                            ))}
+                        {collections && collections.length === 0 && <Alert type="info">No collections found, try adding a new one.</Alert>}
+                        </div>
+                    )}
+                    <ul className="divide-y divide-gray-200">
                     </ul>
                 </div>
                 <div className="col mb-2 ">
                     <div className="mb-5 justify-right">
                             {collection !== "" && (
                                 <div>
-                                    <ButtonLink  variant='secondary' to={`contract/:${id}/collection/${collectionMap.get(collection)}`}>
+                                    <ButtonLink  variant='secondary' to={`/contract/${id}/collection/${collectionMap.get(collection)}`}>
                                         + Add token to collection
                                     </ButtonLink>
-                                    <Button variant='secondary' onClick={downloadOwnersCSV} disabled={collection === ""}>
-                                        Download CSV of current owners of collection
-                                    </Button>
                                 </div>
                     )}
                             <div>
@@ -187,6 +181,9 @@ export function SoulboundTokensPage() {
                                 </label>
                                 <Button  variant="primary" onClick={createNewCollection} disabled={collectionName === ""}>
                                     + Create new collection
+                                </Button>
+                                <Button variant='primary' onClick={downloadOwnersCSV}>
+                                    Download CSV of all owners of collection
                                 </Button>
                             </div>
                     </div>
