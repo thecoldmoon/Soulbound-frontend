@@ -59,7 +59,7 @@ export function SoulboundTokensPage() {
     }, [instances, sdk])
 
     useEffect(() => {
-        console.log('collections', collections)
+        console.log('Collections:', collections)
         console.log('error', error)
     }, [collections, error])
 
@@ -82,9 +82,12 @@ export function SoulboundTokensPage() {
         if (!instance || !instance.data) {
             return;
         }
+
+        //TODO: Add collection name
+
         const getTokenOwners: Job = {
         title: `Get Collection Owners`,
-        onProgress,
+        // onProgress,
         tasks: [
             {
                 ref: 'getOwners',
@@ -94,7 +97,7 @@ export function SoulboundTokensPage() {
                 inputs: {
                     address: instance.data.extensionContract, 
                     abi: abi721,
-                    method: 'getTokenOwners()',
+                    method: 'getTokenOwners',
                     args: [
                     ]
                 },
@@ -102,9 +105,9 @@ export function SoulboundTokensPage() {
         ]
         }
     
-        const { context } = await submitJob(getTokenOwners);
+        const { context } = await sdk.createJob(getTokenOwners);
     
-        return context.getOwners.output[0]
+        return context.getOwners.output
     }
 
     const downloadOwnersCSV = async () => {
@@ -150,11 +153,10 @@ export function SoulboundTokensPage() {
                     {instances && (
                         <div>
                         {collections && collections.map((coln) => (
-                            <Button onClick={() => setCollection(coln.name)} className="block flex py-4 border-b border-gray first:border-t hover:bg-gray-100 truncate">
-                            <li key={coln.name} className={coln.name === collection ? "bg-sky-500/25 py-4 flex" : "py-4 flex"}>
-                                <div className="ml-3 py-4 flex">
-                                    <p className="text-sm font-medium text-gray-900 py-4 flex">{coln.name}</p>
-                                    <p className="text-sm text-gray-500 py-4 flex">{coln.name}</p>
+                            <Button onClick={() => setCollection(coln.name)} className="block flex py-4 pr-20 border-b border-gray first:border-t hover:bg-gray-100">
+                            <li key={coln.name} className={coln.name === collection ? "bg-sky-500/25 pr-40 py-4 w-600 flex" : "py-4 pr-20 w-600 flex"}>
+                                <div className="ml-1 w-10">
+                                    <p className="text-sm font-medium text-gray-900 py-4">{coln.name}</p>
                                 </div>
                             </li>
                         </Button>
@@ -167,13 +169,6 @@ export function SoulboundTokensPage() {
                 </div>
                 <div className="col mb-2 ">
                     <div className="mb-5 justify-right">
-                            {collection !== "" && (
-                                <div>
-                                    <ButtonLink  variant='secondary' to={`/contract/${id}/collection/${collectionMap.get(collection)}`}>
-                                        + Add token to collection
-                                    </ButtonLink>
-                                </div>
-                    )}
                             <div>
                                 <label>
                                     New Collection Name:
@@ -182,10 +177,17 @@ export function SoulboundTokensPage() {
                                 <Button  variant="primary" onClick={createNewCollection} disabled={collectionName === ""}>
                                     + Create new collection
                                 </Button>
-                                <Button variant='primary' onClick={downloadOwnersCSV}>
-                                    Download CSV of all owners of collection
-                                </Button>
                             </div>
+                            {collection !== "" && (
+                                <div>
+                                    <Button variant='secondary' onClick={downloadOwnersCSV}>
+                                        Download CSV of all owners of collection
+                                    </Button>
+                                    <ButtonLink  variant='secondary' to={`/contract/${id}/collection/${collectionMap.get(collection)}`}>
+                                        + Add token to collection
+                                    </ButtonLink>
+                                </div>
+                            )}
                     </div>
                 </div>
             </div>

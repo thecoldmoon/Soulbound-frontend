@@ -31,7 +31,7 @@ export function HomePage() {
 
       if (instances) {
           console.log("instances", instances)
-          // fetch()
+          fetch()
       }
   }, [instances, sdk])
     
@@ -129,7 +129,7 @@ export function HomePage() {
               inputs: {
                 abi: abi721,
                 byteCode: contractByteCode.object,
-                args: [creatorContractAddress],
+                args: [],
               }
             },
             {
@@ -171,7 +171,8 @@ export function HomePage() {
     
       const { context } = await sdk.createJob(getExtensions)
     
-      return context.getCreatorExtensions.output
+      // TODO: Change to return extension address
+      return context.deploySoulboundExtension.output.name
     }
 
     const prepareExtension = async () => {
@@ -196,9 +197,8 @@ export function HomePage() {
 
       // Check if soulbound extension is registered with contract AND has instance
       const creatorContractAddr = contract.contractInfo[1].contractAddress
-      console.log('CC adr', creatorContractAddr)
-      console.log('attachment Instances', instances)
       const instanceExists = instances.find( item => item.data.creatorContract === creatorContractAddr)
+      console.log('Extension Exists', instanceExists)
       if (instanceExists) {
         navigate(`/contract/${instanceExists.id}`)
         return

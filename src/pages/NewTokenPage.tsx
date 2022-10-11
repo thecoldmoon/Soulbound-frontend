@@ -30,10 +30,12 @@ export function NewTokenPage() {
     const [address, setAddress] = useState("");
     const [mintSuccess, setMintSuccess] = useState(false);
     const [assetIdn, setAssetIdn] = useState<number>(0);
+    const [tokenId, setTokenId] = useState<number>(0);
     const [token, setToken] = useState<AirdroppedToken>();
     const backlink = `/contract/${id}`
 
-    const { mutateAsync: updateInstance }  = useUpdateInstance<Collection>()
+    const { mutateAsync: updateCollectionInstance }  = useUpdateInstance<Collection>()
+    const { mutateAsync: updateTokenInstance }  = useUpdateInstance<AirdroppedToken>()
     const { isLoading: isAttachmentLoading, error: attachmentError, data: attachmentInfo } = useInstance<AttachmentInfo>(id)
     const { isLoading: isCollectionLoading, error: collectionError, data: collectionInfo } = useInstance<Collection>(collectionId)
     const { isLoading: loadingTokens, error: errorTokens, data: instances } = useInstances<AirdroppedToken>()
@@ -57,8 +59,10 @@ export function NewTokenPage() {
     }
 
     useEffect(() => {
+        console.log('Attahcment Info', attachmentInfo)
+        console.log('Collection Info', collectionInfo)
         console.log('error', error)
-    }, [error])
+    }, [error, collectionInfo, attachmentInfo])
 
     useEffect(() => {
         const createToken = async () => {
@@ -80,12 +84,13 @@ export function NewTokenPage() {
                 gifted: false,
             }
     
-            const { id: instanceId } = await createInstance({ data: newToken })
+            const { id: tokenId } = await createInstance({ data: newToken })
             setToken(newToken);
             setAssetIdn(assetId);
+            setTokenId(tokenId);
         }
         if (collectionInfo && collectionInfo.data && collectionInfo && collectionId) {
-            //Check if an unused asset exists, if not, create one
+            //Check if an unused gifted in this collection exists, if not, create one
             const tokenExists = existsUnusedTokens();
             if (!tokenExists) {
             createToken();
@@ -110,7 +115,7 @@ export function NewTokenPage() {
 
         const assetId = token.assetId
         const contractAddress = attachmentInfo.data.extensionContract
-        console.log('minting', assetId, token, collectionInfo)
+        console.log('minting', assetId, token, collectionInfo, address)
 
         // Prepares the job with two tasks:
         // 1. Upload the asset to Arweave
@@ -130,9 +135,9 @@ export function NewTokenPage() {
                     }
                 },
                 {
-                    ref: 'mint',
-                    name: 'Mint to Address',
-                    description: 'Mints the wallet of recipient',
+                    ref: 'airdrop',
+                    name: 'Airdrop to Vitalik\'s',
+                    description: 'Mints the token on Vitalik\'s wallet.',
                     type: 'tx',
                     inputs: {
                         address: contractAddress,
@@ -148,10 +153,10 @@ export function NewTokenPage() {
             ]
         }
 
-        await updateInstance({ id, data: {edition: collectionInfo.data.edition+1}})
-
         // Run the mint job
         const {context} = await submitJob(mintJob)
+        await updateCollectionInstance({ id, data: {edition: collectionInfo.data.edition+1}})
+        await updateTokenInstance({ id: tokenId, data: {gifted: true}})
         setMintSuccess(true);
     }
 
