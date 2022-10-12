@@ -5,6 +5,7 @@ import {AttachmentInfo} from '../types'
 import {useNavigate} from 'react-router-dom'
 import {useState, useEffect} from 'react'
 import {abi721} from 'src/lib/manifold-creator-abi'
+import {soulbound_abi721} from 'src/lib/soulbound-abi'
 
 export function HomePage() {
     const sdk = useSDK()
@@ -19,8 +20,9 @@ export function HomePage() {
       console.log(progress.result)
       console.log(progress.task.ref)
       console.log(progress.context)
-  }
+    }
 
+    // DELETE LOG WHEN DONE: Used to clear instances
     useEffect(() => {
       const fetch = async () => {
           if (!instances) return
@@ -31,9 +33,9 @@ export function HomePage() {
 
       if (instances) {
           console.log("instances", instances)
-          fetch()
+          // fetch()
       }
-  }, [instances, sdk])
+    }, [instances, sdk])
     
     const createAttachmentInfo = async (creatorContractAddress: string, extensionAddress: string) => {
         console.log("createAttachmentInfo")
@@ -51,7 +53,6 @@ export function HomePage() {
         navigate(`/contract/${instanceId}`)
     }
 
-    // Async Jobs
     const getExtensions = async (creatorContractAddress: string) => {
       const getExtensions: Job = {
         title: `getCreatorExtensions`,
@@ -77,7 +78,7 @@ export function HomePage() {
       return context.getExtensions.output[0]
     }
 
-    const getExtensionNames = async (extensionsOnContract: []) => {
+    const getRegisteredSoulboundExt = async (extensionsOnContract: []) => {
       if (extensionsOnContract.length === 0) {
         return ""
       }
@@ -92,9 +93,10 @@ export function HomePage() {
               address: extension, 
               abi: abi721,
               method: 'supportsInterface(bytes4)',
-              args: ['0x736f756c']
+              args: ['0x54bd1f8f']
           },})
       );
+
 
       const checkExtensions: Job = {
       
@@ -103,7 +105,6 @@ export function HomePage() {
       }
 
       const { context } = await sdk.createJob(checkExtensions)
-      console.log("extensionsOnContract:", context)
 
       // Change to verify extension type
       for (const [key, value] of Object.entries(context)) {
@@ -158,7 +159,7 @@ export function HomePage() {
               },
               inputs: {
                 address: `{{deploySoulboundExtension.output.name}}`,
-                abi: abi721,
+                abi: soulbound_abi721,
                 method: 'setApproveTransfer(address,bool)',
                 args: [
                     creatorContractAddress, 
@@ -182,7 +183,7 @@ export function HomePage() {
       const creatorContractAddr = contract.contractInfo[1].contractAddress
       const extensionsOnContract = await getExtensions(creatorContractAddr);
       console.log("extensionsOnContract", extensionsOnContract)
-      const soulboundAddr = await getExtensionNames(extensionsOnContract);
+      const soulboundAddr = await getRegisteredSoulboundExt(extensionsOnContract);
       console.log("extensionsNames", soulboundAddr)
 
       // Register extension if needed, else use existing extension
@@ -190,12 +191,12 @@ export function HomePage() {
       await createAttachmentInfo(creatorContractAddr, linkSoulboundExtension)
     }
 
-    const prepareAttachmentInfo = async () => {
+    const selectCreatorContract = async () => {
       if (!instances || !contract) {
         return;
       }
 
-      // Check if soulbound extension is registered with contract AND has instance
+      // Check if soulbound extension is registered with contract AND has attachment instance
       const creatorContractAddr = contract.contractInfo[1].contractAddress
       const instanceExists = instances.find( item => item.data.creatorContract === creatorContractAddr)
       console.log('Extension Exists', instanceExists)
@@ -215,7 +216,7 @@ export function HomePage() {
                 <div className="flex items-center space-x-6">
                     <h1 className="flex-auto text-2xl font-bold">Choose the contract you wish to mint Soulbound NFTs on</h1>
                 </div>
-                <Button variant="primary" onClick={prepareAttachmentInfo} disabled={!contract}>
+                <Button variant="primary" onClick={selectCreatorContract} disabled={!contract}>
                     Select
                 </Button>
             </div>

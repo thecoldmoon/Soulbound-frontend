@@ -5,6 +5,8 @@ import {Link, useParams, useNavigate} from 'react-router-dom'
 import {useEffect, useState, useCallback} from 'react'
 import {ArrowLeftIcon} from '@heroicons/react/outline'
 import {abi721} from 'src/lib/manifold-creator-abi'
+import {soulbound_abi721} from 'src/lib/soulbound-abi'
+import { ContractSpec } from '@manifoldxyz/studio-app-sdk/dist/types/domain'
 
 export function SoulboundTokensPage() {
     const navigate = useNavigate()
@@ -12,23 +14,14 @@ export function SoulboundTokensPage() {
     const id = parseInt(params.id!)
 
     const sdk = useSDK()
-    const { isLoading: loadingSB, error: errorSB, data: instance } = useInstance<AttachmentInfo>(id)
-    const { isLoading: loadingTokens, error: errorTokens, data: instances } = useInstances<Collection>()
+    const { isLoading: loadingAttachment, error: attachmentError, data: attachmentInstance} = useInstance<AttachmentInfo>(id)
+    const { isLoading: collectionsLoading, error: collectionError, data: collectionInstances } = useInstances<Collection>()
     const { mutateAsync: createInstance } = useCreateInstance<Collection>()
 
     const [collectionMap, setCollectionMap] = useState<Map<string, number>>(new Map<string, number>())
-    const [collectionName, setCollectionName] = useState('')
+    const [newCollectionName, setNewCollectionName] = useState('')
+    const [csvAvailable, setCSVAvailable] = useState(true)
     const [collection, setCollection] = useState('')
-    const [collections, setCollections] = useState<Collection[]>()
-
-    const {
-        isProcessing,     // if job is still happening
-        isSuccess,        // if job was successful or not
-        progress,         // contains most recent progress event
-        result,           // result of your job
-        error,            // error object
-        submit: submitJob            // handler to pass job to invoke
-    } = useSubmitJob();
 
     const onProgress = (progress: JobProgress) => {
         console.log(progress.stage) // 'start-task' | 'complete-task'
@@ -39,36 +32,83 @@ export function SoulboundTokensPage() {
        
 
     useEffect(() => {
-        const fetch = async () => {
-            if (!instances) return;
-            var valid_collections: Collection[] = []
+        const syncCollectionsOnContract = async () => {
             var map: Map<string, number> = new Map<string, number>()
-            instances.forEach(function({ id:tid, data }) { 
+            getExistingCollectionInstances(map);
+
+            // Fetch Collections
+            if (!collectionInstances || !attachmentInstance || !collectionMap) return;
+            const getCollectionsOnContract: Job = {
+                title: `Get Collection Owners`,
+                onProgress,
+                tasks: [
+                    {
+                        ref: 'getCollectionsOnContract',
+                        name: 'Get Collections on Soulbound Extension',
+                        description: 'Get Collections on Soulbound Extension',
+                        type: 'contract-call',
+                        inputs: {
+                            address: attachmentInstance.data.extensionContract, 
+                            abi: soulbound_abi721,
+                            method: 'getCollections()',
+                            args:[],
+                        },
+                    },
+                ]
+            }
+            
+            const { context } = await sdk.createJob(getCollectionsOnContract);
+            const collectionNames = context.getCollectionsOnContract.output[0];
+            const collectionEditions = context.getCollectionsOnContract.output[1];
+
+            // Create new collection instance if doesn't exist
+            for (let i = 0; i < collectionNames.length; i++) {
+                const collectionName = collectionNames[i];
+                if (map.has(collectionName)){
+                    continue
+                }
+        
+                const newCollection: Collection = {
+                    name: collectionName,
+                    attachmentId: id,
+                    edition: collectionEditions[i],
+                }
+                const { id: instanceId } = await createInstance({ data: newCollection })
+                map.set(collectionName, instanceId);
+            }
+            setCollectionMap(map)
+        }
+
+        const getExistingCollectionInstances = (map: Map<string, number>) => {
+            if (!collectionInstances) return;
+            collectionInstances.forEach(function({ id:tid, data }) { 
                     if (data.attachmentId === id){
+                        console.log("collection_Instance", data)
                         map.set(data.name, tid);
-                        valid_collections.push(data)
                     }
             });  
-            setCollectionMap(map)
-            setCollections(valid_collections)
         }
 
-        if (instances) {
-            fetch();
+        if (collectionInstances) {
+            syncCollectionsOnContract();
         }
-    }, [instances, sdk])
+    }, [collectionInstances, sdk, id, attachmentInstance, createInstance])
 
+
+    // DELETE LOG WHEN DONE
     useEffect(() => {
-        console.log('Collections:', collections)
-        console.log('error', error)
-    }, [collections, error])
+        console.log('Collections:', Array.from(collectionMap.keys()))
+    }, [collectionMap])
 
     const createNewCollection = async () => {
 
-        // Check if instance exists
+        if (collectionMap.has(newCollectionName)){
+            alert('Collection already exists!')
+            return
+        }
 
         const newCollection: Collection = {
-            name: collectionName,
+            name: newCollectionName,
             attachmentId: id,
             edition: 0,
         }
@@ -78,59 +118,63 @@ export function SoulboundTokensPage() {
         
     }
     
-    const getTokenOwners = async () => {
-        if (!instance || !instance.data) {
+    const getTokenOwnersForCollection = async () => {
+        if (!attachmentInstance|| !attachmentInstance.data) {
             return;
         }
+        const contractSpec: ContractSpec = 'erc721'
+        console.log('param', collection)
 
-        //TODO: Add collection name
-
-        const getTokenOwners: Job = {
+        const getTokenOwnersForCollection: Job = {
         title: `Get Collection Owners`,
-        // onProgress,
+        onProgress,
         tasks: [
             {
                 ref: 'getOwners',
                 name: 'Get Collection Owners',
                 description: 'Get Collection Owners',
+                adminCheck: {
+                    creatorContractAddress: attachmentInstance.data.creatorContract,
+                    contractSpec: contractSpec,
+                },
                 type: 'contract-call',
                 inputs: {
-                    address: instance.data.extensionContract, 
-                    abi: abi721,
-                    method: 'getTokenOwners',
-                    args: [
-                    ]
+                    address: attachmentInstance.data.extensionContract, 
+                    abi: soulbound_abi721,
+                    method: 'getTokenOwnersForCollection(string)',
+                    args:[collection],
                 },
             },
         ]
         }
     
-        const { context } = await sdk.createJob(getTokenOwners);
+        const { context } = await sdk.createJob(getTokenOwnersForCollection);
     
-        return context.getOwners.output
+        return context.getOwners.output[0]
     }
 
     const downloadOwnersCSV = async () => {
-        const fetched_owners = await getTokenOwners();
+        const fetched_owners = await getTokenOwnersForCollection();
         console.log('fetched_owners', fetched_owners)
-        if (!fetched_owners) return;
+        if (!fetched_owners || fetched_owners.length === 0) {
+            setCSVAvailable(false);
+            return;
+        }
+
         //define the heading for each row of the data  
         var csv = 'Owner Address\n';  
-                    
+        setCSVAvailable(true);
         //merge the data with CSV  
         fetched_owners.forEach(function(row: string) { 
                 csv += row + "\n";  
         });  
-
-        //display the created CSV data on the web browser   
-        document.write(csv);  
 
         var hiddenElement = document.createElement('a');  
         hiddenElement.href = 'data:text/csv;charset=utf-8,' + encodeURI(csv);  
         hiddenElement.target = '_blank';  
             
         //provide the name for the CSV file to be downloaded  
-        hiddenElement.download = 'owners.csv';  
+        hiddenElement.download = collection+'_owners.csv';  
         hiddenElement.click();  
     }
 
@@ -147,21 +191,22 @@ export function SoulboundTokensPage() {
             <div className="grid grid-cols-3">
                 <div className="col-span-2 mb-2 ">
                     <h3 className="flex-auto text-2xl font-bold">Select or create a collection to add a token</h3>
-                    {(loadingTokens || loadingSB) && <Loader />}
-                    {errorTokens && <Alert type="error">{errorTokens.message}</Alert>}
-                    {errorSB && <Alert type="error">{errorSB.message}</Alert>}
-                    {instances && (
+                    {!csvAvailable && <Alert type="info">No owners were found for this collection. Try another one </Alert>}
+                    {collectionMap && Array.from(collectionMap.keys()).length === 0 && <Alert type="info">No collections found, try adding a new one.</Alert>}
+                    {(collectionsLoading || loadingAttachment) && <Loader />}
+                    {collectionError && <Alert type="error">{collectionError.message}</Alert>}
+                    {attachmentError && <Alert type="error">{attachmentError.message}</Alert>}
+                    {collectionInstances && (
                         <div>
-                        {collections && collections.map((coln) => (
-                            <Button onClick={() => setCollection(coln.name)} className="block flex py-4 pr-20 border-b border-gray first:border-t hover:bg-gray-100">
-                            <li key={coln.name} className={coln.name === collection ? "bg-sky-500/25 pr-40 py-4 w-600 flex" : "py-4 pr-20 w-600 flex"}>
+                        {collectionMap && Array.from(collectionMap.keys()).map((coln) => (
+                            <Button onClick={() => setCollection(coln)} className="block flex py-4 pr-20 border-b border-gray first:border-t hover:bg-gray-100">
+                            <li key={coln} className={coln === collection ? "bg-sky-500/25 pr-40 py-4 w-600 flex" : "py-4 pr-20 w-600 flex"}>
                                 <div className="ml-1 w-10">
-                                    <p className="text-sm font-medium text-gray-900 py-4">{coln.name}</p>
+                                    <p className="text-sm font-medium text-gray-900 py-4">{coln}</p>
                                 </div>
                             </li>
                         </Button>
                             ))}
-                        {collections && collections.length === 0 && <Alert type="info">No collections found, try adding a new one.</Alert>}
                         </div>
                     )}
                     <ul className="divide-y divide-gray-200">
@@ -172,9 +217,9 @@ export function SoulboundTokensPage() {
                             <div>
                                 <label>
                                     New Collection Name:
-                                    <input value={collectionName} onChange={e => setCollectionName(e.target.value)} type='text' />
+                                    <input value={newCollectionName} onChange={e => setNewCollectionName(e.target.value)} type='text' />
                                 </label>
-                                <Button  variant="primary" onClick={createNewCollection} disabled={collectionName === ""}>
+                                <Button  variant="primary" onClick={createNewCollection} disabled={newCollectionName === ""}>
                                     + Create new collection
                                 </Button>
                             </div>

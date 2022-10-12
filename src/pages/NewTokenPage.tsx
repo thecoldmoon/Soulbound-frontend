@@ -18,6 +18,7 @@ import {useEffect, useState} from 'react'
 import {ArrowLeftIcon} from '@heroicons/react/outline'
 import {Job, JobProgress} from '@manifoldxyz/studio-app-sdk'
 import {abi721} from 'src/lib/manifold-creator-abi'
+import {soulbound_abi721} from 'src/lib/soulbound-abi'
 
 export function NewTokenPage() {
     const sdk = useSDK();
@@ -90,7 +91,7 @@ export function NewTokenPage() {
             setTokenId(tokenId);
         }
         if (collectionInfo && collectionInfo.data && collectionInfo && collectionId) {
-            //Check if an unused gifted in this collection exists, if not, create one
+            // Check if an unused gifted in this collection exists, if not, create one
             const tokenExists = existsUnusedTokens();
             if (!tokenExists) {
             createToken();
@@ -115,7 +116,7 @@ export function NewTokenPage() {
 
         const assetId = token.assetId
         const contractAddress = attachmentInfo.data.extensionContract
-        console.log('minting', assetId, token, collectionInfo, address)
+        console.log('minting', collectionInfo.data.name, address)
 
         // Prepares the job with two tasks:
         // 1. Upload the asset to Arweave
@@ -136,12 +137,12 @@ export function NewTokenPage() {
                 },
                 {
                     ref: 'airdrop',
-                    name: 'Airdrop to Vitalik\'s',
-                    description: 'Mints the token on Vitalik\'s wallet.',
+                    name: 'Airdrop to Receiver',
+                    description: "Mints the token on receiver's wallet.",
                     type: 'tx',
                     inputs: {
                         address: contractAddress,
-                        abi: abi721,
+                        abi: soulbound_abi721,
                         method: 'mint(string,address,string)',
                         args: [
                             collectionInfo.data.name,
