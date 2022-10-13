@@ -14,11 +14,12 @@ import {
 } from '@manifoldxyz/studio-app-sdk-react'
 import {AirdroppedToken, Collection, AttachmentInfo} from 'src/types'
 import {Link, useParams, useNavigate,} from 'react-router-dom'
-import {useEffect, useState} from 'react'
+import {useEffect, useState, useCallback} from 'react'
 import {ArrowLeftIcon} from '@heroicons/react/outline'
 import {Job, JobProgress} from '@manifoldxyz/studio-app-sdk'
 import {abi721} from 'src/lib/manifold-creator-abi'
 import {soulbound_abi721} from 'src/lib/soulbound-abi'
+import { createToken } from 'typescript'
 
 export function NewTokenPage() {
     const sdk = useSDK();
@@ -65,51 +66,64 @@ export function NewTokenPage() {
         console.log('error', error)
     }, [error, collectionInfo, attachmentInfo])
 
+    const createToken = useCallback(async (edition: Number) => {
+        if (!collectionInfo || !collectionInfo.data) {
+            return;
+        }
+
+        //Create asset to be associated with instance
+        const {id: assetId, metadata} = await createAsset();
+        const new_Edition = collectionInfo.data.edition + 1;
+
+        console.log("createtoken", collectionInfo.data.edition, new_Edition)
+        //Update Asset Name here
+        metadata.name = collectionInfo.data.name +" #"+ String(edition);
+        console.log("createtokenname", metadata.name)
+        await updateMetadata({id: assetId, data: metadata})
+
+        //Create Token
+        const newToken: AirdroppedToken = {
+            assetId: assetId,
+            collectionId: collectionId,
+            gifted: false,
+        }
+
+        const { id: tokenId } = await createInstance({ data: newToken })
+        setToken(newToken);
+        setAssetIdn(assetId);
+        setTokenId(tokenId);
+    },[collectionInfo, createAsset, createInstance, updateMetadata, collectionId])
+
     useEffect(() => {
-        const createToken = async () => {
-            if (!collectionInfo || !collectionInfo.data || !collectionInfo) {
-                return;
-            }
-    
-            //Create asset to be associated with instance
-            const {id: assetId, metadata} = await createAsset();
+        const shouldCreateNewToken = () => {
+            // Check if new token should be created
+            // 1. If instances not fetched, wait until fetched
+            // 2. If instances fetched, check if there is a unclaimed token in this collection
 
-            //Update Asset Name here
-            metadata.name = collectionInfo.data.name +" #"+ String(collectionInfo.data.edition+1);
-            await updateMetadata({id: assetId, data: metadata})
-    
-            //Create Token
-            const newToken: AirdroppedToken = {
-                assetId: assetId,
-                collectionId: collectionId,
-                gifted: false,
-            }
-    
-            const { id: tokenId } = await createInstance({ data: newToken })
-            setToken(newToken);
-            setAssetIdn(assetId);
-            setTokenId(tokenId);
+            if (!instances) return false
+            const instanceExists = instances.find( item => item.data.gifted === false && item.data.collectionId === collectionId)
+            if (!instanceExists) return true
+            setTokenId(instanceExists.id);
+            setToken(instanceExists.data);
+            setAssetIdn(instanceExists.data.assetId);
+            return false
         }
-        if (collectionInfo && collectionInfo.data && collectionInfo && collectionId) {
-            // Check if an unused gifted in this collection exists, if not, create one
-            const tokenExists = existsUnusedTokens();
-            if (!tokenExists) {
-            createToken();
+        if (collectionInfo && collectionInfo.data && collectionId) {
+            
+            // Checks if an unused gifted in this collection exists, if not, create one
+            const createNewToken = shouldCreateNewToken();
+            if (createNewToken  && !token) {
+                createToken(collectionInfo.data.edition+1);
             }
         }
-    }, [collectionInfo, createAsset, createInstance, updateMetadata, collectionId])
-
-
-    const existsUnusedTokens = () => {
-        if (!instances) return true
-        const instanceExists = instances.find( item => item.data.gifted === false && item.data.collectionId === collectionId)
-        if (!instanceExists) return false
-        setToken(instanceExists.data);
-        setAssetIdn(instanceExists.data.assetId);
-        return true
-    }
+    }, [collectionInfo, collectionId, instances, createToken, token])
 
     const mintToAddress = async () => {
+        // Prepares the job with two tasks:
+        // 1. Upload the asset to Arweave
+        // 2. Call the mintBase function on the creator's Manifold Creator contract
+        //    with the Arweave URI generated in the previous task.
+
         if (!attachmentInfo || !collectionInfo || !address || !token) {
             return
         }
@@ -118,10 +132,6 @@ export function NewTokenPage() {
         const contractAddress = attachmentInfo.data.extensionContract
         console.log('minting', collectionInfo.data.name, address)
 
-        // Prepares the job with two tasks:
-        // 1. Upload the asset to Arweave
-        // 2. Call the mintBase function on the creator's Manifold Creator contract
-        //    with the Arweave URI generated in the previous task.
         const mintJob: Job = {
             title: `Airdrop To Address`,
             onProgress,
@@ -156,9 +166,10 @@ export function NewTokenPage() {
 
         // Run the mint job
         const {context} = await submitJob(mintJob)
-        await updateCollectionInstance({ id, data: {edition: collectionInfo.data.edition+1}})
+        await updateCollectionInstance({ id: collectionId, data: {edition: collectionInfo.data.edition+1}})
         await updateTokenInstance({ id: tokenId, data: {gifted: true}})
         setMintSuccess(true);
+        await createToken(collectionInfo.data.edition+2);
     }
 
     return (
@@ -171,7 +182,7 @@ export function NewTokenPage() {
                     <h1 className="flex-auto text-2xl font-bold">Create token</h1>
                 </div>
             </div>
-            {mintSuccess && <Alert type="success" title="Success">Token minted successfully! Go back to previous page to mint again</Alert>} 
+            {mintSuccess && <Alert type="success" title="Success">Token minted successfully!</Alert>} 
             {isCollectionLoading && <Loader />}
             {collectionError && <Alert type="error">{collectionError.message}</Alert>}
             {collectionInfo &&

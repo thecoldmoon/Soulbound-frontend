@@ -117,7 +117,6 @@ export function HomePage() {
     }
 
     const registerSoulboundExtension = async (creatorContractAddress: string) => {
-      console.log("registerSoulboundExtension")
       const getExtensions: Job = {
         title: `Create and Register Soulbound Extension to Creator Contract`,
         onProgress,
@@ -128,9 +127,9 @@ export function HomePage() {
               description: 'Deploy Soulbound Extension Contract',
               type: 'contract-deploy',
               inputs: {
-                abi: abi721,
+                abi: soulbound_abi721,
                 byteCode: contractByteCode.object,
-                args: [],
+                args: [creatorContractAddress],
               }
             },
             {
@@ -144,7 +143,7 @@ export function HomePage() {
               },
               inputs: {
                 creatorContractAddress: creatorContractAddress,
-                extensionAddress: `{{deploySoulboundExtension.output.name}}`,
+                extensionAddress: `{{deploySoulboundExtension.output.contractAddress}}`,
                 creatorContractSpec: 'erc721'
               }
             },
@@ -158,7 +157,7 @@ export function HomePage() {
                 contractSpec: 'erc721'
               },
               inputs: {
-                address: `{{deploySoulboundExtension.output.name}}`,
+                address: `{{deploySoulboundExtension.output.contractAddress}}`,
                 abi: soulbound_abi721,
                 method: 'setApproveTransfer(address,bool)',
                 args: [
@@ -173,13 +172,17 @@ export function HomePage() {
       const { context } = await sdk.createJob(getExtensions)
     
       // TODO: Change to return extension address
-      return context.deploySoulboundExtension.output.name
+      return context.deploySoulboundExtension.output.contractAddress
     }
 
     const prepareExtension = async () => {
       if (!contract) {
         return;
       }
+      // The function checks for an existing soulbound extension on the contract
+      // 1. Checks if soulbound extension exists, if so, create extension instance with it
+      // 2. If soulbound extension doesn't exist, it deploys a new one and registers it to the creator contract
+
       const creatorContractAddr = contract.contractInfo[1].contractAddress
       const extensionsOnContract = await getExtensions(creatorContractAddr);
       console.log("extensionsOnContract", extensionsOnContract)
@@ -195,8 +198,10 @@ export function HomePage() {
       if (!instances || !contract) {
         return;
       }
+      // The function checks for an existing instance of the extension contract
+      // 1. Checks if extension instance exists
+      // 2. If extension instance doesn't exist, it prepares the extension contract for the creator contract
 
-      // Check if soulbound extension is registered with contract AND has attachment instance
       const creatorContractAddr = contract.contractInfo[1].contractAddress
       const instanceExists = instances.find( item => item.data.creatorContract === creatorContractAddr)
       console.log('Extension Exists', instanceExists)
@@ -205,7 +210,6 @@ export function HomePage() {
         return
       }
 
-      // Check if soulbound extension is registered with contract, but no instance
       await prepareExtension()
     }
 

@@ -32,7 +32,20 @@ export function SoulboundTokensPage() {
        
 
     useEffect(() => {
-        const syncCollectionsOnContract = async () => {
+        const getExistingCollectionInstances = (map: Map<string, number>) => {
+            if (!collectionInstances) return;
+            collectionInstances.forEach(function({ id:tid, data }) { 
+                    if (data.attachmentId === id){
+                        console.log("collection_Instance", data)
+                        map.set(data.name, tid);
+                    }
+            });  
+        }
+        const syncCollections = async () => {
+            // The function syncs contract collections with the collection instances:
+            // 1. Gather existing collection instances
+            // 2. Fetch all collections from the contract and update existing instances
+
             var map: Map<string, number> = new Map<string, number>()
             getExistingCollectionInstances(map);
 
@@ -79,18 +92,8 @@ export function SoulboundTokensPage() {
             setCollectionMap(map)
         }
 
-        const getExistingCollectionInstances = (map: Map<string, number>) => {
-            if (!collectionInstances) return;
-            collectionInstances.forEach(function({ id:tid, data }) { 
-                    if (data.attachmentId === id){
-                        console.log("collection_Instance", data)
-                        map.set(data.name, tid);
-                    }
-            });  
-        }
-
         if (collectionInstances) {
-            syncCollectionsOnContract();
+            syncCollections();
         }
     }, [collectionInstances, sdk, id, attachmentInstance, createInstance])
 
