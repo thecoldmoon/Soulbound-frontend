@@ -1,10 +1,9 @@
-import {Alert, AssetUploader, Button, ButtonLink, Loader, Section, useInstance, useInstances, useSDK, useSubmitJob, useCreateInstance} from '@manifoldxyz/studio-app-sdk-react'
-import {Job, JobProgress} from '@manifoldxyz/studio-app-sdk'
-import {AttachmentInfo, AirdroppedToken, Collection} from 'src/types'
+import {Alert, Button, ButtonLink, Loader, Section, useInstance, useInstances, useSDK, useCreateInstance} from '@manifoldxyz/studio-app-sdk-react'
+import {Job} from '@manifoldxyz/studio-app-sdk'
+import {AttachmentInfo, Collection} from 'src/types'
 import {Link, useParams, useNavigate} from 'react-router-dom'
-import {useEffect, useState, useCallback} from 'react'
+import {useEffect, useState} from 'react'
 import {ArrowLeftIcon} from '@heroicons/react/outline'
-import {abi721} from 'src/lib/manifold-creator-abi'
 import {soulbound_abi721} from 'src/lib/soulbound-abi'
 import { ContractSpec } from '@manifoldxyz/studio-app-sdk/dist/types/domain'
 
@@ -22,28 +21,21 @@ export function SoulboundTokensPage() {
     const [newCollectionName, setNewCollectionName] = useState('')
     const [csvAvailable, setCSVAvailable] = useState(true)
     const [collection, setCollection] = useState('')
-
-    const onProgress = (progress: JobProgress) => {
-        console.log(progress.stage) // 'start-task' | 'complete-task'
-        console.log(progress.result)
-        console.log(progress.task.ref)
-        console.log(progress.context)
-    }
        
 
     useEffect(() => {
         const getExistingCollectionInstances = (map: Map<string, number>) => {
+             // The function fetches all existing collection instances and adds them to the map
             if (!collectionInstances) return;
             collectionInstances.forEach(function({ id:tid, data }) { 
                     if (data.attachmentId === id){
-                        console.log("collection_Instance", data)
                         map.set(data.name, tid);
                     }
             });  
         }
         const syncCollections = async () => {
             // The function syncs contract collections with the collection instances:
-            // 1. Gather existing collection instances
+            // 1. Gather existing collection instances from sdk
             // 2. Fetch all collections from the contract and update existing instances
 
             var map: Map<string, number> = new Map<string, number>()
@@ -53,7 +45,6 @@ export function SoulboundTokensPage() {
             if (!collectionInstances || !attachmentInstance || !collectionMap) return;
             const getCollectionsOnContract: Job = {
                 title: `Get Collection Owners`,
-                onProgress,
                 tasks: [
                     {
                         ref: 'getCollectionsOnContract',
@@ -74,7 +65,7 @@ export function SoulboundTokensPage() {
             const collectionNames = context.getCollectionsOnContract.output[0];
             const collectionEditions = context.getCollectionsOnContract.output[1];
 
-            // Create new collection instance if doesn't exist
+            // Create new collection instance if doesn't exist for fetched collection
             for (let i = 0; i < collectionNames.length; i++) {
                 const collectionName = collectionNames[i];
                 if (map.has(collectionName)){
@@ -97,13 +88,10 @@ export function SoulboundTokensPage() {
         }
     }, [collectionInstances, sdk, id, attachmentInstance, createInstance])
 
-
-    // DELETE LOG WHEN DONE
-    useEffect(() => {
-        console.log('Collections:', Array.from(collectionMap.keys()))
-    }, [collectionMap])
-
     const createNewCollection = async () => {
+        // The functions prepares a new collection instance upon new collection request
+        // 1. Alert user if collection name already exists
+        // 2. Prepare CSV with fetched collection owners
 
         if (collectionMap.has(newCollectionName)){
             alert('Collection already exists!')
@@ -117,20 +105,20 @@ export function SoulboundTokensPage() {
         }
 
         const { id: instanceId } = await createInstance({ data: newCollection })
-        navigate(`/contract/${id}/collection/${instanceId}`)
+        navigate(`/ext/${id}/collection/${instanceId}`)
         
     }
     
     const getTokenOwnersForCollection = async () => {
+        // The function fetches all token owners for a collection from the sdk
+
         if (!attachmentInstance|| !attachmentInstance.data) {
             return;
         }
         const contractSpec: ContractSpec = 'erc721'
-        console.log('param', collection)
 
         const getTokenOwnersForCollection: Job = {
         title: `Get Collection Owners`,
-        onProgress,
         tasks: [
             {
                 ref: 'getOwners',
@@ -157,17 +145,23 @@ export function SoulboundTokensPage() {
     }
 
     const downloadOwnersCSV = async () => {
+        // The functions prepares and exports the owners of a collection to a CSV file
+        // 1. Alert user when there are no owners for collection
+        // 2. Prepare CSV with fetched collection owners
+
         const fetched_owners = await getTokenOwnersForCollection();
-        console.log('fetched_owners', fetched_owners)
+
+        //If no owners were fetched, send alert message
         if (!fetched_owners || fetched_owners.length === 0) {
             setCSVAvailable(false);
             return;
         }
 
-        //define the heading for each row of the data  
+        //Define the heading for each row of the data  
         var csv = 'Owner Address\n';  
         setCSVAvailable(true);
-        //merge the data with CSV  
+
+        //Merge the data with CSV  
         fetched_owners.forEach(function(row: string) { 
                 csv += row + "\n";  
         });  
@@ -176,7 +170,7 @@ export function SoulboundTokensPage() {
         hiddenElement.href = 'data:text/csv;charset=utf-8,' + encodeURI(csv);  
         hiddenElement.target = '_blank';  
             
-        //provide the name for the CSV file to be downloaded  
+        //Provide the name for the CSV file to be downloaded  
         hiddenElement.download = collection+'_owners.csv';  
         hiddenElement.click();  
     }
@@ -231,7 +225,7 @@ export function SoulboundTokensPage() {
                                     <Button variant='secondary' onClick={downloadOwnersCSV}>
                                         Download CSV of all owners of collection
                                     </Button>
-                                    <ButtonLink  variant='secondary' to={`/contract/${id}/collection/${collectionMap.get(collection)}`}>
+                                    <ButtonLink  variant='secondary' to={`/ext/${id}/collection/${collectionMap.get(collection)}`}>
                                         + Add token to collection
                                     </ButtonLink>
                                 </div>

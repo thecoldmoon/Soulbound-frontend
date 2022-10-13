@@ -14,9 +14,3 @@ export type AttachmentInfo = {
   creatorContract: string
   extensionContract: string
 }
-
-export type SimpleContract = {
-  name: string
-  address: string
-  spec: string
-}

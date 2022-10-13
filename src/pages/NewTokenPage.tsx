@@ -3,82 +3,60 @@ import {
     AssetUploader, Button,
     Loader,
     Section,
+    useSDK,
     useCreateAsset,
     useInstances,
     useCreateInstance,
     useUpdateAssetMetadata,
     useUpdateInstance,
     useInstance,
-    useSubmitJob,
-    useSDK
+    useSubmitJob
 } from '@manifoldxyz/studio-app-sdk-react'
 import {AirdroppedToken, Collection, AttachmentInfo} from 'src/types'
-import {Link, useParams, useNavigate,} from 'react-router-dom'
+import {Link, useParams} from 'react-router-dom'
 import {useEffect, useState, useCallback} from 'react'
 import {ArrowLeftIcon} from '@heroicons/react/outline'
-import {Job, JobProgress} from '@manifoldxyz/studio-app-sdk'
-import {abi721} from 'src/lib/manifold-creator-abi'
+import {Job} from '@manifoldxyz/studio-app-sdk'
 import {soulbound_abi721} from 'src/lib/soulbound-abi'
-import { createToken } from 'typescript'
 
 export function NewTokenPage() {
-    const sdk = useSDK();
     const params = useParams<{ collection: string , id: string}>()
     const collectionId = parseInt(params.collection!)
     const id = parseInt(params.id!)
-    const { mutateAsync: updateMetadata } = useUpdateAssetMetadata()
+
     const { mutateAsync: createAsset } = useCreateAsset()
     const { mutateAsync: createInstance } = useCreateInstance<AirdroppedToken>()
+
     const [address, setAddress] = useState("");
     const [mintSuccess, setMintSuccess] = useState(false);
     const [assetIdn, setAssetIdn] = useState<number>(0);
     const [tokenId, setTokenId] = useState<number>(0);
     const [token, setToken] = useState<AirdroppedToken>();
-    const backlink = `/contract/${id}`
 
     const { mutateAsync: updateCollectionInstance }  = useUpdateInstance<Collection>()
     const { mutateAsync: updateTokenInstance }  = useUpdateInstance<AirdroppedToken>()
+    const { mutateAsync: updateMetadata } = useUpdateAssetMetadata()
+
     const { isLoading: isAttachmentLoading, error: attachmentError, data: attachmentInfo } = useInstance<AttachmentInfo>(id)
     const { isLoading: isCollectionLoading, error: collectionError, data: collectionInfo } = useInstance<Collection>(collectionId)
     const { isLoading: loadingTokens, error: errorTokens, data: instances } = useInstances<AirdroppedToken>()
 
-    //Clean up if asset not used
-
-    const {
-        isProcessing,     // if job is still happening
-        isSuccess,        // if job was successful or not
-        progress,         // contains most recent progress event
-        result,           // result of your job
-        error,            // error object
-        submit: submitJob,          // handler to pass job to invoke
-    } = useSubmitJob();
-
-    const onProgress = (progress: JobProgress) => {
-        console.log(progress.stage) // 'start-task' | 'complete-task'
-        console.log(progress.result)
-        console.log(progress.task.ref)
-        console.log(progress.context)
-    }
-
-    useEffect(() => {
-        console.log('Attahcment Info', attachmentInfo)
-        console.log('Collection Info', collectionInfo)
-        console.log('error', error)
-    }, [error, collectionInfo, attachmentInfo])
+    const sdk = useSDK();
+    const {submit: submitJob} = useSubmitJob();
+    const backlink = `/ext/${id}`
 
     const createToken = useCallback(async (edition: Number) => {
+        // The function creates a new token instance for this collection
+
         if (!collectionInfo || !collectionInfo.data) {
             return;
         }
 
         //Create asset to be associated with instance
         const {id: assetId, metadata} = await createAsset();
-        const new_Edition = collectionInfo.data.edition + 1;
 
-        console.log("createtoken", collectionInfo.data.edition, new_Edition)
         //Update Asset Name here
         metadata.name = collectionInfo.data.name +" #"+ String(edition);
-        console.log("createtokenname", metadata.name)
         await updateMetadata({id: assetId, data: metadata})
 
         //Create Token
@@ -119,22 +97,24 @@ export function NewTokenPage() {
     }, [collectionInfo, collectionId, instances, createToken, token])
 
     const mintToAddress = async () => {
-        // Prepares the job with two tasks:
-        // 1. Upload the asset to Arweave
-        // 2. Call the mintBase function on the creator's Manifold Creator contract
-        //    with the Arweave URI generated in the previous task.
+        // The function prepares the minting job and submits it to the blockchain
+        // 1. Check if asset inputs are valid
+        // 2. Submit job 1) Upload the asset to Arweave, 2) Call the mint function
 
-        if (!attachmentInfo || !collectionInfo || !address || !token) {
+        if (!attachmentInfo || !collectionInfo || !address || !token || !assetIdn) {
             return
         }
+        const asset = await sdk.fetchAsset(assetIdn)
 
-        const assetId = token.assetId
+        if (!asset.metadata.description || !asset.metadata.description) {
+            alert("Please fill in the description and name of the token before minting");
+            return;
+        }
+
         const contractAddress = attachmentInfo.data.extensionContract
-        console.log('minting', collectionInfo.data.name, address)
 
         const mintJob: Job = {
             title: `Airdrop To Address`,
-            onProgress,
             tasks: [
                 {
                     ref: 'upload',
@@ -142,7 +122,7 @@ export function NewTokenPage() {
                     description: 'Uploads the asset to decentralized, forever storage',
                     type: 'arweave-upload',
                     inputs: {
-                        assetId
+                        assetId: assetIdn
                     }
                 },
                 {
@@ -165,7 +145,7 @@ export function NewTokenPage() {
         }
 
         // Run the mint job
-        const {context} = await submitJob(mintJob)
+        await submitJob(mintJob)
         await updateCollectionInstance({ id: collectionId, data: {edition: collectionInfo.data.edition+1}})
         await updateTokenInstance({ id: tokenId, data: {gifted: true}})
         setMintSuccess(true);

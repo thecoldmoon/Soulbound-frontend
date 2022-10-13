@@ -1,9 +1,8 @@
-<h1 align="center">New React App</h1>
+<h1 align="center">Soulbound Studio App</h1>
 
 <br />
 
-This is a blank README file that you can customize at your needs.\
-Describe your project, how it works and how to contribute to it.
+This Manifold Studio app allows you to deploy soulbound (non-transferrable) tokens and collections on an existing ERC-721 contract
 
 <br />
 
@@ -16,84 +15,11 @@ In the project directory, you can run:
 ## ⚡️ start
 
 ```
-yarn start
-```
-
-or
-
-```
-yarn start
+npm start
 ```
 
 Runs the app in the development mode.\
 Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
-
-<br />
-
-## 🧪 test
-
-```
-yarn test
-```
-
-or
-
-```
-yarn test
-```
-
-Launches the test runner in the interactive watch mode.
-
-<br />
-
-## 🦾 build
-
-```
-yarn build
-```
-
-or
-
-```
-yarn build
-```
-
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.
-
-<br />
-
-## 🧶 lint
-
-```
-yarn lint
-```
-
-or
-
-```
-yarn lint
-```
-
-Creates a `.eslintcache` file in which ESLint cache is stored. Running this command can dramatically improve ESLint's running time by ensuring that only changed files are linted.
-
-<br />
-
-## 🎯 format
-
-```
-yarn format
-```
-
-or
-
-```
-yarn format
-```
-
-Checks if your files are formatted. This command will output a human-friendly message and a list of unformatted files, if any.
 
 <br />
 
@@ -105,14 +31,10 @@ This is the structure of the files in the project:
     │
     ├── public                  # public files (favicon, .htaccess, manifest, ...)
     ├── src                     # source files
-    │   ├── components
-    │   ├── pages
-    │   ├── resources           # images, constants and other static resources
-    │   ├── store               # Redux store
-    │   │   ├── actions         # store's actions
-    │   │   └── reducers        # store's reducers
+    │   ├── contracts           # contract bytecode
+    │   ├── lib                 # abis
+    │   ├── pages               
     │   ├── styles
-    │   ├── tests               # all test files
     │   ├── types               # data interfaces
     │   ├── utility             # utilities functions and custom components
     │   ├── App.tsx
@@ -120,7 +42,8 @@ This is the structure of the files in the project:
     │   ├── react-app-env.d.ts
     │   ├── RootComponent.tsx   # React component with all the routes
     │   ├── serviceWorker.ts
-    │   └── setupTests.ts
+    │   ├── setupTests.ts
+    │   └── types.ts            # Data interfaces
     ├── .eslintrc.js
     ├── .gitignore
     ├── .prettierrc
@@ -129,12 +52,10 @@ This is the structure of the files in the project:
     └── tsconfig.json
 ```
 
-# 📖 Learn More
+# 📖 Types
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-#
-
-<p align="center">Bootstrapped with Create React App.</p>
+- `AttachmentInfo` - Instance associating creator contract with extension
+- `Collection` - Instance of a soulbound collection
+-- Keeps track of `edition`: the total number of editions in the collection
+- `AirDroppedToken` - Instance of an asset to a collection
+-- Keeps track of `gifted`: whether or not the token is minted to receiver

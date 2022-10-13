@@ -16,8 +16,8 @@ export function App() {
         <Routes>
           <Route index element={<HomePage />} />
           <Route path="*" element={<NotFoundPage />} />
-          <Route path="contract/:id" element={<SoulboundTokensPage />} />
-          <Route path="contract/:id/collection/:collection" element={<NewTokenPage />} />
+          <Route path="ext/:id" element={<SoulboundTokensPage />} />
+          <Route path="ext/:id/collection/:collection" element={<NewTokenPage />} />
         </Routes>
       </BrowserRouter>
     </StudioAppProvider>
