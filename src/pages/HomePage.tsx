@@ -1,4 +1,4 @@
-import {Button, Section, useInstances, ContractSelector, useSDK, useCreateInstance} from '@manifoldxyz/studio-app-sdk-react'
+import {Alert, Button, Loader, Section, useInstances, ContractSelector, useSDK, useCreateInstance} from '@manifoldxyz/studio-app-sdk-react'
 import {Job, Contract,  Task} from '@manifoldxyz/studio-app-sdk'
 import {contractByteCode} from 'src/contracts/contractByteCode'
 import {AttachmentInfo} from '../types'
@@ -212,6 +212,8 @@ export function HomePage() {
                 <div className="flex items-center space-x-6">
                     <h1 className="flex-auto text-2xl font-bold">Choose the contract you wish to mint Soulbound NFTs on</h1>
                 </div>
+                {isLoading && <Loader />}
+                {error && <Alert type="error">{error.message}</Alert>}
                 <Button variant="primary" onClick={selectCreatorContract} disabled={!contract}>
                     Select
                 </Button>
