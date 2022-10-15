@@ -1,4 +1,4 @@
-import {Alert, Button, ButtonLink, Loader, Section, useInstance, useInstances, useSDK, useCreateInstance} from '@manifoldxyz/studio-app-sdk-react'
+import {Alert, Button, ButtonLink, Loader, Section, useInstance, useInstances, useSDK, useSubmitJob, useCreateInstance} from '@manifoldxyz/studio-app-sdk-react'
 import {Job} from '@manifoldxyz/studio-app-sdk'
 import {AttachmentInfo, Collection} from 'src/types'
 import {Link, useParams, useNavigate} from 'react-router-dom'
@@ -21,6 +21,7 @@ export function SoulboundTokensPage() {
     const [newCollectionName, setNewCollectionName] = useState('')
     const [csvAvailable, setCSVAvailable] = useState(true)
     const [collection, setCollection] = useState('')
+    const {error: submitError, submit: submitJob} = useSubmitJob();
        
 
     useEffect(() => {
@@ -62,6 +63,11 @@ export function SoulboundTokensPage() {
             }
             
             const { context } = await sdk.createJob(getCollectionsOnContract);
+            if (!context || context.error) {
+                alert('Error fetching collections on contract');
+                return;
+            }
+
             const collectionNames = context.getCollectionsOnContract.output[0];
             const collectionEditions = context.getCollectionsOnContract.output[1];
 
@@ -139,7 +145,12 @@ export function SoulboundTokensPage() {
         ]
         }
     
-        const { context } = await sdk.createJob(getTokenOwnersForCollection);
+        const { context} = await sdk.createJob(getTokenOwnersForCollection);
+
+        if (!context || context.error) {
+            alert('Error fetching collection owners');
+            return;
+        }
     
         return context.getOwners.output[0]
     }

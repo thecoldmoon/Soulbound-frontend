@@ -58,6 +58,11 @@ export function HomePage() {
       }
     
       const { context: extensionContext } = await sdk.createJob(getExtensions)
+      if (!extensionContext || extensionContext.error) {
+        alert('Error fetching extension interfaces');
+        return;
+      }
+
       const extensionsOnContract = extensionContext.getExtensions.output[0]
 
       if (extensionsOnContract.length === 0) {
@@ -86,6 +91,11 @@ export function HomePage() {
       }
 
       const { context: interfaceContext } = await sdk.createJob(checkExtensionInterfaces)
+
+      if (!interfaceContext || interfaceContext.error) {
+        alert('Error fetching extension interfaces');
+        return;
+      }
 
       for (const [key, value] of Object.entries(interfaceContext)) {
         if (value.output[0] === true){
@@ -151,6 +161,11 @@ export function HomePage() {
       }
     
       const { context } = await sdk.createJob(getExtensions)
+      if (!context || context.error) {
+        alert('Error fetching extensions');
+        return;
+      }
+
       return context.deploySoulboundExtension.output.contractAddress
     }
 

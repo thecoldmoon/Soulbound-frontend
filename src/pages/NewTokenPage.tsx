@@ -42,7 +42,7 @@ export function NewTokenPage() {
     const { isLoading: loadingTokens, error: errorTokens, data: instances } = useInstances<AirdroppedToken>()
 
     const sdk = useSDK();
-    const {submit: submitJob} = useSubmitJob();
+    const {error: submitError, submit: submitJob} = useSubmitJob();
     const backlink = `/ext/${id}`
 
     const createToken = useCallback(async (edition: Number) => {
@@ -98,7 +98,7 @@ export function NewTokenPage() {
 
     const mintToAddress = async () => {
         // The function prepares the minting job and submits it to the blockchain
-        // 1. Check if asset inputs are valid
+        // 1. Check if asset inputs are valid, check if address is valid
         // 2. Submit job 1) Upload the asset to Arweave, 2) Call the mint function
 
         if (!attachmentInfo || !collectionInfo || !address || !token || !assetIdn) {
@@ -108,6 +108,10 @@ export function NewTokenPage() {
 
         if (!asset.metadata.description || !asset.metadata.description) {
             alert("Please fill in the description and name of the token before minting");
+            return;
+        }
+        if (!address.startsWith('0x') || address.length !== 42) {
+            alert("Not a valid address");
             return;
         }
 
@@ -163,6 +167,11 @@ export function NewTokenPage() {
                 </div>
             </div>
             {mintSuccess && <Alert type="success" title="Success">Token minted successfully!</Alert>} 
+            {submitError && <Alert type="error" title="Error">There was an error minting the token. Please try again.</Alert>}
+            {loadingTokens && <Loader />}
+            {errorTokens && <Alert type="error">{errorTokens.message}</Alert>}
+            {isAttachmentLoading && <Loader />}
+            {attachmentError && <Alert type="error">{attachmentError.message}</Alert>}
             {isCollectionLoading && <Loader />}
             {collectionError && <Alert type="error">{collectionError.message}</Alert>}
             {collectionInfo &&
